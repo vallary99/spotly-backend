@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v2 as cloudinary } from 'cloudinary';
-import { v4 as uuid } from 'uuid';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 
 // Three possible backends, resolved by resolveProvider() below: local
 // disk (dev default, nothing configured), S3-compatible (AWS S3 or
@@ -168,7 +168,7 @@ export class StorageService {
   // URL) — for that provider this just returns the eventual public URL,
   // matching what the S3 branch returns for `publicUrl` today.
   async getPresignedUploadUrl(businessId: string, fileExtension: string) {
-    const key = `businesses/${businessId}/${uuid()}.${fileExtension}`;
+    const key = `businesses/${businessId}/${randomUUID()}.${fileExtension}`;
     const provider = this.resolveProvider();
 
     if (provider === 'local') {

@@ -207,21 +207,6 @@ development and testing without any of it.
 4. Restart the backend. The "Continue with Google" button will now
    complete a real OAuth flow instead of returning a 503.
 
-### Apple Sign In
-1. In the [Apple Developer portal](https://developer.apple.com/account/),
-   create a Services ID, enable Sign In with Apple, and generate a
-   private key (downloads as a `.p8` file).
-2. Set in the backend's `.env`:
-   ```
-   APPLE_CLIENT_ID="your.services.id"
-   APPLE_TEAM_ID="..."
-   APPLE_KEY_ID="..."
-   APPLE_PRIVATE_KEY="$(cat AuthKey_XXXXXXXXXX.p8)"
-   ```
-   (Paste the full contents of the `.p8` file as the value, not a
-   file path.)
-3. Restart the backend.
-
 ### M-Pesa Daraja (Safaricom)
 See the checklist in `spotly-api/README.md` — Consumer Key/Secret,
 Shortcode, Passkey, and a publicly-reachable callback URL (Daraja can't

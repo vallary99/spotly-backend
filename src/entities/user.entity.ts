@@ -47,7 +47,7 @@ export class User {
   @Column()
   name: string;
 
-  // email | google | apple — google/apple are simulated in MVP per BRD Section 11
+  // email | google — google is simulated in MVP per BRD Section 11
   @Column({ default: 'email' })
   authProvider: string;
 

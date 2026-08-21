@@ -34,10 +34,6 @@ export class HealthController {
         clientSecretPresent: has('GOOGLE_CLIENT_SECRET'),
         callbackUrl: this.config.get('GOOGLE_CALLBACK_URL') || null,
       },
-      apple: {
-        configured:
-          has('APPLE_CLIENT_ID') && has('APPLE_TEAM_ID') && has('APPLE_KEY_ID') && has('APPLE_PRIVATE_KEY'),
-      },
       mpesa: {
         configured: has('MPESA_CONSUMER_KEY') && has('MPESA_CONSUMER_SECRET'),
       },

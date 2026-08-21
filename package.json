@@ -5,8 +5,8 @@
   "author": "",
   "private": true,
   "license": "UNLICENSED",
-  "type": "module",
   "scripts": {
+    "prebuild": "rm -rf dist",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
@@ -46,7 +46,6 @@
     "cloudinary": "^2.10.0",
     "ioredis": "^6.0.0",
     "passport": "^0.7.0",
-    "passport-apple": "^2.0.2",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.23.0",
@@ -54,8 +53,7 @@
     "resend": "^6.18.1",
     "rxjs": "^7.8.1",
     "sharp": "^0.35.3",
-    "typeorm": "^0.3.31",
-    "uuid": "^14.0.1"
+    "typeorm": "^0.3.31"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -71,7 +69,6 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/pg": "^8.21.0",
     "@types/supertest": "^7.0.0",
-    "@types/uuid": "^10.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",

@@ -29,6 +29,7 @@ const SEED_CATEGORIES = [
   'Cake Decorating',
   'Candle Making',
   'Crafts Studio',
+  'Photography Studio',
   // Art & Galleries
   'Art Gallery',
   'Art Studio',

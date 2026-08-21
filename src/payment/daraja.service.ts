@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { v4 as uuid } from 'uuid';
+import { randomUUID } from 'crypto';
 
 // Wraps Safaricom's Daraja API. When MPESA_CONSUMER_KEY/SECRET are unset
 // (as they will be until real credentials are provided — see the README
@@ -48,8 +48,8 @@ export class DarajaService {
         'MPESA_CONSUMER_KEY/SECRET not set — simulating STK Push. Provide real Daraja credentials to go live.',
       );
       return {
-        checkoutRequestId: `SIM-${uuid()}`,
-        merchantRequestId: `SIM-${uuid()}`,
+        checkoutRequestId: `SIM-${randomUUID()}`,
+        merchantRequestId: `SIM-${randomUUID()}`,
         simulated: true,
       };
     }

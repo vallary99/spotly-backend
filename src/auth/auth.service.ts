@@ -8,10 +8,10 @@ import { User, UserRole } from '../entities/user.entity';
 import { SignupDto, LoginDto } from './dto/auth.dto';
 import { EmailService } from '../email/email.service';
 
-// Live Google/Apple OAuth is wired up (see google.strategy.ts /
-// apple.strategy.ts). If GOOGLE_CLIENT_ID/SECRET or the Apple equivalents
-// aren't set in .env, those routes return a clear "not configured" error
-// instead of crashing — see auth.controller.ts / oauth-config.guard.ts.
+// Live Google OAuth is wired up (see google.strategy.ts). If
+// GOOGLE_CLIENT_ID/SECRET aren't set in .env, that route returns a clear
+// "not configured" error instead of crashing — see auth.controller.ts /
+// oauth-config.guard.ts.
 @Injectable()
 export class AuthService {
   constructor(
@@ -80,11 +80,11 @@ export class AuthService {
     return { message: 'Password updated — you can now log in with your new password.' };
   }
 
-  // Shared by the Google and Apple callback routes. Finds an existing
-  // user by email (so someone who signed up with email/password and later
-  // uses "Continue with Google" on the same address lands on the same
-  // account, rather than silently creating a duplicate), or creates one.
-  async oauthLogin(params: { email: string; name: string; provider: 'google' | 'apple' }) {
+  // Used by the Google callback route. Finds an existing user by email
+  // (so someone who signed up with email/password and later uses
+  // "Continue with Google" on the same address lands on the same account,
+  // rather than silently creating a duplicate), or creates one.
+  async oauthLogin(params: { email: string; name: string; provider: 'google' }) {
     let user = await this.users.findOne({ where: { email: params.email } });
     if (!user) {
       user = await this.users.save(

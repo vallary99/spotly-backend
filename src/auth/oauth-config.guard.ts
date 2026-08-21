@@ -21,24 +21,3 @@ export class GoogleAuthGuard extends AuthGuard('google') {
     return super.canActivate(context) as boolean | Promise<boolean>;
   }
 }
-
-@Injectable()
-export class AppleAuthGuard extends AuthGuard('apple') {
-  constructor(private config: ConfigService) {
-    super();
-  }
-
-  canActivate(context: ExecutionContext) {
-    if (
-      !this.config.get('APPLE_CLIENT_ID') ||
-      !this.config.get('APPLE_TEAM_ID') ||
-      !this.config.get('APPLE_KEY_ID') ||
-      !this.config.get('APPLE_PRIVATE_KEY')
-    ) {
-      throw new ServiceUnavailableException(
-        'Apple sign-in isn\'t configured yet. Add APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID and APPLE_PRIVATE_KEY to the backend .env.',
-      );
-    }
-    return super.canActivate(context) as boolean | Promise<boolean>;
-  }
-}

@@ -5,7 +5,7 @@ import { AuthService } from './auth.service';
 import { SignupDto, LoginDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { GoogleAuthGuard, AppleAuthGuard } from './oauth-config.guard';
+import { GoogleAuthGuard } from './oauth-config.guard';
 
 interface OAuthUser {
   email: string;
@@ -76,26 +76,6 @@ export class AuthController {
   @Get('google/callback')
   async googleCallback(@Req() req: Request & { user: OAuthUser }, @Res() res: Response) {
     const result = await this.auth.oauthLogin({ ...req.user, provider: 'google' });
-    const frontendUrl = this.config.get<string>('FRONTEND_URL') || 'http://localhost:3001';
-    res.redirect(`${frontendUrl}/auth/callback?token=${result.accessToken}`);
-  }
-
-  // ---------- Apple ----------
-
-  @Public()
-  @UseGuards(AppleAuthGuard)
-  @Get('apple')
-  appleAuth() {
-    // Guard handles the redirect to Apple — this body never runs.
-  }
-
-  // Apple's response_mode is form_post, so its callback arrives as a POST,
-  // not a GET (this is Apple-specific; Google's is a GET).
-  @Public()
-  @UseGuards(AppleAuthGuard)
-  @Post('apple/callback')
-  async appleCallback(@Req() req: Request & { user: OAuthUser }, @Res() res: Response) {
-    const result = await this.auth.oauthLogin({ ...req.user, provider: 'apple' });
     const frontendUrl = this.config.get<string>('FRONTEND_URL') || 'http://localhost:3001';
     res.redirect(`${frontendUrl}/auth/callback?token=${result.accessToken}`);
   }

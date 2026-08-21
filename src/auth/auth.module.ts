@@ -8,8 +8,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { GoogleStrategy } from './google.strategy';
-import { AppleStrategy } from './apple.strategy';
-import { GoogleAuthGuard, AppleAuthGuard } from './oauth-config.guard';
+import { GoogleAuthGuard } from './oauth-config.guard';
 import { EmailModule } from '../email/email.module';
 
 @Module({
@@ -26,7 +25,7 @@ import { EmailModule } from '../email/email.module';
       }),
     }),
   ],
-  providers: [AuthService, JwtStrategy, GoogleStrategy, AppleStrategy, GoogleAuthGuard, AppleAuthGuard],
+  providers: [AuthService, JwtStrategy, GoogleStrategy, GoogleAuthGuard],
   controllers: [AuthController],
   exports: [JwtModule, PassportModule],
 })

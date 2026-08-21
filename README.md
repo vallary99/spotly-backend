@@ -79,8 +79,6 @@ POST   /auth/login
 POST   /auth/refresh                                (auth required — re-issues token with current role/businessId)
 GET    /auth/google                                  (starts Google OAuth)
 GET    /auth/google/callback
-GET    /auth/apple                                   (starts Apple Sign In)
-POST   /auth/apple/callback
 
 POST   /businesses                              (auth required)
 GET    /businesses?neighborhood=&category=&q=    (public)
@@ -148,16 +146,11 @@ sketched in a comment there already).
 - Client ID + Client Secret
 - Authorized redirect URI: `http://localhost:3000/auth/google/callback` (update for your deployed domain in production)
 
-### 4. Apple Sign In (Apple Developer Portal)
-- Team ID, Key ID, private key (.p8 file contents), Client ID (your Services ID)
-- Redirect URI: `http://localhost:3000/auth/apple/callback`
-
-Google and Apple OAuth are both fully wired up (`passport-google-oauth20`
-and `passport-apple`, see `src/auth/google.strategy.ts` and
-`src/auth/apple.strategy.ts`) — not placeholders. Without real
-credentials in `.env`, `/auth/google` and `/auth/apple` return a clear
-503 "not configured yet" instead of crashing; drop in real credentials
-and they work immediately, no code changes needed.
+Google OAuth is fully wired up (`passport-google-oauth20`, see
+`src/auth/google.strategy.ts`) — not a placeholder. Without real
+credentials in `.env`, `/auth/google` returns a clear 503 "not
+configured yet" instead of crashing; drop in real credentials and it
+works immediately, no code changes needed.
 
 ## Known follow-ups (not blockers, but worth doing before production)
 
