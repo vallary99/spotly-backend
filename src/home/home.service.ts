@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Business } from '../entities/business.entity';
+import { Business, SubscriptionTier } from '../entities/business.entity';
 import { Experience } from '../entities/experience.entity';
 import { BusinessService } from '../business/business.service';
 
@@ -71,9 +71,42 @@ export class HomeService {
       this.businessService.attachRatingsAndStripMetrics(popularRaw),
     ]);
 
-    // Hero photography drawn from live businesses (FR-1.3) — first
-    // available media per top business as a simple heuristic.
-    const heroSource = trending.slice(0, 5).map((b) => ({ id: b.id, name: b.name }));
+    // Hero photography drawn from live businesses (FR-1.3). Mostly a
+    // simple heuristic (top trending businesses), but up to 2 of the 5
+    // slots are reserved for the Featured/Premium tiers' "occasional
+    // homepage featuring" perk — a random paid-tier business not
+    // already earning its spot organically. Two SEPARATE random picks
+    // (Premium-only, then either tier) rather than one random pick
+    // across both tiers, so paying more for Premium visibly buys a
+    // better chance at a feature, not an equal one. This is genuine
+    // enforcement of what the tier card promises, not just a label —
+    // see tier-limits.ts's extraFeatures comment.
+    const organicHero = trending.slice(0, 3);
+    const excludeIds = new Set(organicHero.map((b) => b.id));
+
+    const pickRandomFeatured = async (tiers: SubscriptionTier[]) => {
+      const qb = this.businesses.createQueryBuilder('b');
+      this.businessService.applyListingFilters(qb, params);
+      qb.andWhere('b.tier IN (:...tiers)', { tiers });
+      if (excludeIds.size > 0) {
+        qb.andWhere('b.id NOT IN (:...excludeIds)', { excludeIds: Array.from(excludeIds) });
+      }
+      qb.orderBy('RANDOM()').take(1);
+      return qb.getOne();
+    };
+
+    const premiumPick = await pickRandomFeatured([SubscriptionTier.PREMIUM]);
+    if (premiumPick) excludeIds.add(premiumPick.id);
+    const eitherPick = await pickRandomFeatured([SubscriptionTier.PREMIUM, SubscriptionTier.GROWTH]);
+    const featuredPicks = [premiumPick, eitherPick].filter((b): b is Business => Boolean(b));
+
+    // Fill any remaining slots (if fewer than 2 paid-tier businesses
+    // were available) from the rest of the organic trending list, so
+    // the hero always has up to 5 entries when enough businesses exist.
+    const fillerCount = Math.max(0, 5 - organicHero.length - featuredPicks.length);
+    const fillerHero = trending.slice(3, 3 + fillerCount);
+
+    const heroSource = [...organicHero, ...featuredPicks, ...fillerHero].map((b) => ({ id: b.id, name: b.name }));
 
     return {
       hero: { featured: heroSource },

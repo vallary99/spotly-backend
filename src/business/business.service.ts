@@ -5,7 +5,8 @@ import { Business } from '../entities/business.entity';
 import { Experience } from '../entities/experience.entity';
 import { User, UserRole } from '../entities/user.entity';
 import { UsageEvent } from '../entities/usage-event.entity';
-import { CreateBusinessDto, UpdateBusinessDto } from './dto/business.dto';
+import { Media, MediaStatus, MediaType } from '../entities/media.entity';
+import { CreateBusinessDto, UpdateBusinessDto, SetCoverPhotoDto } from './dto/business.dto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { EmailService } from '../email/email.service';
@@ -123,6 +124,7 @@ export class BusinessService {
     @InjectRepository(User) private users: Repository<User>,
     @InjectRepository(Experience) private experiences: Repository<Experience>,
     @InjectRepository(UsageEvent) private usageEvents: Repository<UsageEvent>,
+    @InjectRepository(Media) private media: Repository<Media>,
     @InjectQueue('usage') private usageQueue: Queue,
     private email: EmailService,
   ) {}
@@ -186,7 +188,15 @@ export class BusinessService {
   }) {
     const qb = this.businesses.createQueryBuilder('b');
     this.applyListingFilters(qb, params);
-    qb.orderBy('b.createdAt', 'DESC').take(50);
+    // Premium's "priority search placement" — Premium businesses sort
+    // first, then Featured (GROWTH), then Starter, and createdAt DESC
+    // breaks ties within each tier (the previous, and only, ordering).
+    // A raw CASE expression rather than a second query/sort pass, since
+    // this needs to combine with take(50) at the DB level, not paginate
+    // then re-sort in memory.
+    qb.orderBy(`CASE b.tier WHEN 'PREMIUM' THEN 0 WHEN 'GROWTH' THEN 1 ELSE 2 END`, 'ASC')
+      .addOrderBy('b.createdAt', 'DESC')
+      .take(50);
     const results = await qb.getMany();
     return this.attachRatingsAndStripMetrics(results);
   }
@@ -237,6 +247,37 @@ export class BusinessService {
     }
     Object.assign(business, dto);
     return this.businesses.save(business);
+  }
+
+  // PATCH /businesses/:id/cover-photo — lets an owner pick which of
+  // their own approved photos leads their card/homepage thumbnail,
+  // instead of always defaulting to whichever photo happened to be
+  // uploaded first.
+  async setCoverPhoto(id: string, userId: string, dto: SetCoverPhotoDto) {
+    const business = await this.businesses.findOne({ where: { id } });
+    if (!business) {
+      throw new NotFoundException('Business not found.');
+    }
+    if (business.ownerId !== userId) {
+      throw new ForbiddenException('You do not own this business.');
+    }
+
+    if (dto.mediaId) {
+      const media = await this.media.findOne({ where: { id: dto.mediaId, businessId: id } });
+      if (!media) {
+        throw new NotFoundException('Photo not found on this business.');
+      }
+      if (media.type !== MediaType.PHOTO || media.status !== MediaStatus.APPROVED) {
+        throw new ForbiddenException('Only an approved photo can be set as the cover.');
+      }
+      business.coverMediaId = media.id;
+    } else {
+      // Explicit reset back to the default (oldest approved photo).
+      business.coverMediaId = null;
+    }
+
+    await this.businesses.save(business);
+    return { coverMediaId: business.coverMediaId };
   }
 
   // DELETE /businesses/:id — lets an owner close their Business Account
@@ -382,9 +423,24 @@ export class BusinessService {
 
     return businesses.map((b) => {
       const rating = ratingsById.get(b.id);
+      let media = mediaById.get(b.id) ?? [];
+      // Owner-chosen cover photo goes first, so every consumer of this
+      // media array (BusinessCard's resolveBusinessPhotoUrl, the
+      // homepage rails, the business detail page's gallery) picks it up
+      // automatically without each needing its own cover-aware logic —
+      // they already all take "the first approved PHOTO in the array."
+      // Falls back to natural createdAt-ASC order (oldest/first-uploaded
+      // first) when no cover is set, or when the chosen cover is no
+      // longer in this list (deleted, or unapproved since being chosen).
+      if (b.coverMediaId) {
+        const idx = media.findIndex((m) => m.id === b.coverMediaId);
+        if (idx > 0) {
+          media = [media[idx], ...media.slice(0, idx), ...media.slice(idx + 1)];
+        }
+      }
       const result: any = {
         ...b,
-        media: mediaById.get(b.id) ?? [],
+        media,
         averageRating: rating ? Number(rating.avg.toFixed(1)) : 0,
         reviewCount: rating ? rating.count : 0,
       };

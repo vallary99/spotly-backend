@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MoreThanOrEqual, Repository } from 'typeorm';
 import { Experience } from '../entities/experience.entity';
 import { Business } from '../entities/business.entity';
 import { CreateExperienceDto, UpdateExperienceDto } from './dto/experience.dto';
@@ -51,19 +51,39 @@ export class ExperienceService {
       throw new ForbiddenException('You do not own this business.');
     }
 
-    const liveCount = await this.experiences.count({
-      where: { businessId, isExpired: false },
-    });
-    const limit = (await this.tierConfig.getLimits(business.tier)).concurrentExperiences;
-    // Starter has no included experiences (pay-per-event add-on) — for MVP
-    // scaffold we block outright; a real build would branch here into the
-    // PaymentModule for a per-event charge before creating the row.
-    if (limit !== null && liveCount >= limit) {
-      const message =
-        limit === 0
-          ? `Your ${business.tier} package doesn't allow live experiences. Upgrade to Growth or Premium to start hosting.`
-          : `You've reached your ${business.tier} package's limit of ${limit} concurrently live experience(s). Upgrade for more, or wait for one to expire.`;
-      throw new ForbiddenException(message);
+    const limits = await this.tierConfig.getLimits(business.tier);
+    if (limits.concurrentExperiences !== null) {
+      // Premium: a concurrently-live cap (FR-11.2) — how many
+      // not-yet-expired experiences exist right now, regardless of
+      // when they were created.
+      const liveCount = await this.experiences.count({
+        where: { businessId, isExpired: false },
+      });
+      if (liveCount >= limits.concurrentExperiences) {
+        throw new ForbiddenException(
+          `You've reached your ${business.tier} package's limit of ${limits.concurrentExperiences} concurrently live experience(s). Wait for one to expire, or remove one first.`,
+        );
+      }
+    } else if (limits.monthlyExperiencesIncluded !== null) {
+      // Featured (and Starter's 0): a monthly allowance, not a
+      // concurrent-live cap — how many were CREATED this calendar
+      // month, regardless of whether they're still live. This was
+      // previously read from tier config but never actually checked
+      // here, so Featured-tier businesses had no real experience cap
+      // at all despite the package promising a fixed monthly allowance.
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
+      const monthlyCount = await this.experiences.count({
+        where: { businessId, createdAt: MoreThanOrEqual(startOfMonth) },
+      });
+      if (monthlyCount >= limits.monthlyExperiencesIncluded) {
+        const message =
+          limits.monthlyExperiencesIncluded === 0
+            ? `Your ${business.tier} package doesn't include hosting experiences. Upgrade to Featured or Premium to start hosting.`
+            : `You've used all ${limits.monthlyExperiencesIncluded} experience(s) included in your ${business.tier} package this month. Upgrade to Premium for more room.`;
+        throw new ForbiddenException(message);
+      }
     }
 
     return this.experiences.save(

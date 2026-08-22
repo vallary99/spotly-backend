@@ -145,6 +145,16 @@ export class Business {
   @Column({ default: false })
   isHiddenGem: boolean;
 
+  // Owner-chosen photo to use as this business's card/homepage
+  // thumbnail. Null means "no explicit choice made" — the app falls
+  // back to the oldest approved photo (first ever uploaded), same
+  // behavior as before this column existed. No FK constraint (media
+  // rows can be deleted independently); MediaService/BusinessService
+  // both defensively fall back to the default when this points at a
+  // photo that's since been removed or unapproved.
+  @Column({ type: 'varchar', nullable: true })
+  coverMediaId: string | null;
+
   // Admin-only suspension (see AdminController). A suspended business is
   // excluded from public listing/search/home (same EXISTS-based gate as
   // "must have an approved photo" — see applyListingFilters) but keeps

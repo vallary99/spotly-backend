@@ -25,33 +25,44 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimit> = {
     priceKes: 0,
     photos: 5,
     videos: 1,
-    videoMaxSeconds: 60,
+    videoMaxSeconds: 15,
     concurrentExperiences: 0, // pay-per-event add-on only
     monthlyExperiencesIncluded: 0,
     extraFeatures: [],
     experienceAddonPriceKes: 500, // no subscription revenue at all on this tier, so the add-on carries more of the real cost
   },
+  // Displayed to users as "Featured" (the GROWTH enum value itself is
+  // kept as-is — renaming it would mean a DB migration touching every
+  // existing business's `tier` column and every Payment/trial row that
+  // references it, for a purely cosmetic change; the frontend maps
+  // GROWTH -> "Featured" for display, see tierLabel() in dashboard).
   [SubscriptionTier.GROWTH]: {
     priceKes: 1500,
-    photos: 20,
-    videos: 3,
+    photos: 15,
+    videos: 2,
     videoMaxSeconds: 60,
-    concurrentExperiences: null, // governed by monthly included + per-event add-on, not a live cap
-    monthlyExperiencesIncluded: 3,
-    extraFeatures: ['Basic business profile', 'Standard discovery'],
+    concurrentExperiences: null, // governed by monthlyExperiencesIncluded + per-event add-on, not a live cap — see ExperienceService.create
+    monthlyExperiencesIncluded: 5,
+    // "Occasional homepage featuring" is enforced in HomeService.getHome
+    // (a rotating slot reserved for GROWTH/PREMIUM businesses), not just
+    // a label — see the comment there.
+    extraFeatures: ['Occasional homepage featuring'],
     experienceAddonPriceKes: 300,
   },
   [SubscriptionTier.PREMIUM]: {
-    priceKes: 4500,
-    photos: 100,
-    // Real cap, not "unlimited" — storing arbitrary video volume gets
-    // expensive fast, and 50 is still a materially generous jump from
-    // Growth's 3 without an open-ended cost/abuse risk.
-    videos: 50,
+    priceKes: 3000,
+    photos: 30,
+    videos: 5,
     videoMaxSeconds: 90,
     concurrentExperiences: 10, // concurrently-live cap, not monthly (FR-11.2)
     monthlyExperiencesIncluded: null,
-    extraFeatures: ['Featured business profile', 'Priority discovery'],
+    // "Priority search placement" is enforced in BusinessService.findAll
+    // (tier-ordered results); "Occasional homepage featuring" in
+    // HomeService.getHome, same mechanism as GROWTH above. "Featured on
+    // Spotly social media" is a manual/operational promise (your team
+    // posting about a business), not something the app can automate —
+    // kept here only as a marketing bullet.
+    extraFeatures: ['Priority search placement', 'Occasional homepage featuring', 'Featured on Spotly social media'],
     experienceAddonPriceKes: 300,
   },
 };

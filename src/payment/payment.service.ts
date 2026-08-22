@@ -8,6 +8,7 @@ import { InitiatePaymentDto } from './dto/payment.dto';
 import { TierConfigService } from '../subscription/tier-config.service';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { normalizeKenyanMsisdn } from '../common/utils/phone.util';
 
 @Injectable()
 export class PaymentService {
@@ -30,6 +31,17 @@ export class PaymentService {
       throw new NotFoundException('Business not found.');
     }
 
+    // Reject an unusable phone number here, with a clear message, rather
+    // than letting it reach Daraja and come back as an opaque rejected
+    // axios call (see DarajaService) — this is the common case (a typo
+    // or a non-Safaricom number), so it deserves a clean 400, not a 500.
+    const phoneNumber = normalizeKenyanMsisdn(dto.phoneNumber);
+    if (!phoneNumber) {
+      throw new BadRequestException(
+        'Enter a valid Safaricom number to receive the M-Pesa prompt, e.g. 0712345678.',
+      );
+    }
+
     // The amount actually charged, computed server-side for BOTH
     // purposes rather than ever trusting dto.amount — a client
     // controlling what Daraja charges is a real payment-integrity bug,
@@ -50,7 +62,7 @@ export class PaymentService {
     }
 
     const stk = await this.daraja.initiateStkPush({
-      phoneNumber: dto.phoneNumber,
+      phoneNumber,
       amount,
       accountReference: business.name,
       transactionDesc: `Spotly ${dto.purpose}`,

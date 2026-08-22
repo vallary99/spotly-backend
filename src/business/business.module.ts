@@ -5,13 +5,14 @@ import { Business } from '../entities/business.entity';
 import { User } from '../entities/user.entity';
 import { Experience } from '../entities/experience.entity';
 import { UsageEvent } from '../entities/usage-event.entity';
+import { Media } from '../entities/media.entity';
 import { BusinessService } from './business.service';
 import { BusinessController } from './business.controller';
 import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Business, User, Experience, UsageEvent]),
+    TypeOrmModule.forFeature([Business, User, Experience, UsageEvent, Media]),
     BullModule.registerQueue({ name: 'usage' }),
     EmailModule,
   ],

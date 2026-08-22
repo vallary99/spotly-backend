@@ -112,3 +112,18 @@ export class UpdateBusinessDto {
   @IsBoolean()
   isHiddenGem?: boolean;
 }
+
+// PATCH /businesses/:id/cover-photo — a business owner choosing which
+// of their own approved photos leads their card/homepage thumbnail.
+// Deliberately its own tiny DTO/endpoint rather than folded into
+// UpdateBusinessDto: unlike every other field there, this one needs to
+// validate the given id is actually a real, owned, approved PHOTO
+// (see BusinessService.setCoverPhoto), not just assign a plain value.
+export class SetCoverPhotoDto {
+  // Null resets to the default (oldest approved photo), letting an
+  // owner un-pin their explicit choice without needing a separate
+  // endpoint for it.
+  @IsOptional()
+  @IsString()
+  mediaId?: string | null;
+}

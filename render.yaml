@@ -1,0 +1,105 @@
+# Render Blueprint for spotly-api.
+#
+# Why Render (and not Vercel): this app runs a persistent HTTP server
+# (src/main.ts calls app.listen()) plus four BullMQ background workers
+# (src/queue/*.processor.ts) that continuously poll Redis for jobs.
+# Both of those need a long-lived process — the opposite of Vercel's
+# serverless model, where a function starts per-request and is frozen
+# right after responding. Render web services run your Dockerfile as
+# one always-on container, so the HTTP server and the queue workers
+# (which run inside the same Nest process here) both just work.
+#
+# One-time setup after connecting this repo as a Blueprint in the
+# Render dashboard:
+#   1. Render provisions spotly-db (Postgres) and spotly-redis
+#      (Key Value) automatically — no action needed for those.
+#   2. Fill in the `sync: false` variables below in the dashboard
+#      (Cloudinary, Resend, M-Pesa, Google OAuth credentials) — these
+#      are secrets, so they're deliberately not in this file.
+#   3. Once the first deploy finishes, note the assigned URL
+#      (https://spotly-api.onrender.com, or with a random suffix if
+#      that name was taken) and double-check PUBLIC_API_URL and
+#      GOOGLE_CALLBACK_URL below actually match it — update in the
+#      dashboard if Render picked a different name.
+#   4. Point spotly-web's and spotly-admin's NEXT_PUBLIC_API_URL (on
+#      Vercel) at that same URL.
+
+services:
+  - type: web
+    name: spotly-api
+    runtime: docker
+    plan: starter # NOT free — free web services spin down after 15 min
+    # idle, which would kill the BullMQ workers running inside this
+    # same process (moderation, usage tracking, billing renewals,
+    # experience expiry never firing while the service is asleep).
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: spotly-db
+          property: connectionString
+      - key: REDIS_HOST
+        fromService:
+          type: keyvalue
+          name: spotly-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: keyvalue
+          name: spotly-redis
+          property: port
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: "7d"
+      - key: STORAGE_PROVIDER
+        value: "cloudinary"
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: "Spotly <onboarding@resend.dev>" # switch to a verified domain before real launch
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        value: "https://spotly-api.onrender.com/auth/google/callback" # verify/update per step 3 above
+      - key: PUBLIC_API_URL
+        value: "https://spotly-api.onrender.com" # verify/update per step 3 above
+      - key: FRONTEND_URL
+        sync: false # your spotly-web Vercel URL, e.g. https://spotly.co.ke or https://spotly-web.vercel.app
+      - key: MPESA_ENV
+        value: "sandbox" # switch to "production" when you have real Daraja production credentials
+      - key: MPESA_CONSUMER_KEY
+        sync: false
+      - key: MPESA_CONSUMER_SECRET
+        sync: false
+      - key: MPESA_SHORTCODE
+        sync: false
+      - key: MPESA_PASSKEY
+        sync: false
+      - key: MPESA_CALLBACK_URL
+        value: "https://spotly-api.onrender.com/payment/mpesa/callback" # verify/update per step 3 above; confirm path matches payment.controller.ts
+
+  # Key Value (Render's managed Redis-compatible offering) — required
+  # by the BullMQ queues (src/queue/queue.module.ts). ipAllowList is
+  # mandatory for Key Value instances; empty means "internal access
+  # only," which is all the API needs since it connects over Render's
+  # private network.
+  - type: keyvalue
+    name: spotly-redis
+    plan: starter
+    region: oregon
+    ipAllowList: []
+
+databases:
+  - name: spotly-db
+    plan: basic-256mb
+    region: oregon

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { randomUUID } from 'crypto';
@@ -58,30 +58,54 @@ export class DarajaService {
     const passkey = this.config.get('MPESA_PASSKEY');
     const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
     const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
-    const token = await this.getAccessToken();
 
-    const { data } = await axios.post(
-      `${this.baseUrl}/mpesa/stkpush/v1/processrequest`,
-      {
-        BusinessShortCode: shortcode,
-        Password: password,
-        Timestamp: timestamp,
-        TransactionType: 'CustomerPayBillOnline',
-        Amount: params.amount,
-        PartyA: params.phoneNumber,
-        PartyB: shortcode,
-        PhoneNumber: params.phoneNumber,
-        CallBackURL: this.config.get('MPESA_CALLBACK_URL'),
-        AccountReference: params.accountReference,
-        TransactionDesc: params.transactionDesc,
-      },
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
+    try {
+      const token = await this.getAccessToken();
 
-    return {
-      checkoutRequestId: data.CheckoutRequestID,
-      merchantRequestId: data.MerchantRequestID,
-      simulated: false,
-    };
+      const { data } = await axios.post(
+        `${this.baseUrl}/mpesa/stkpush/v1/processrequest`,
+        {
+          BusinessShortCode: shortcode,
+          Password: password,
+          Timestamp: timestamp,
+          TransactionType: 'CustomerPayBillOnline',
+          Amount: params.amount,
+          PartyA: params.phoneNumber,
+          PartyB: shortcode,
+          PhoneNumber: params.phoneNumber,
+          CallBackURL: this.config.get('MPESA_CALLBACK_URL'),
+          AccountReference: params.accountReference,
+          TransactionDesc: params.transactionDesc,
+        },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+
+      return {
+        checkoutRequestId: data.CheckoutRequestID,
+        merchantRequestId: data.MerchantRequestID,
+        simulated: false,
+      };
+    } catch (err) {
+      // Daraja rejects things our own phone-format check can't catch —
+      // a real-looking-but-inactive number, an amount below its
+      // minimum, a misconfigured shortcode/passkey, sandbox account
+      // issues, or Safaricom's API just being down. Whatever it is, log
+      // the raw response for debugging and surface a clean error
+      // instead of letting an unhandled axios error become an opaque
+      // 500 (see PaymentService.initiate, and this Nest exception
+      // filter chain — DatabaseExceptionFilter doesn't cover this).
+      const daraja = (err as { response?: { data?: unknown } })?.response?.data;
+      this.logger.error(`Daraja STK Push failed: ${JSON.stringify(daraja ?? err)}`);
+      if (daraja) {
+        // A structured rejection from Daraja itself (bad request, e.g.
+        // an inactive/invalid number or amount) — the client's fault,
+        // so 400.
+        throw new BadRequestException(
+          "M-Pesa couldn't reach that number. Double-check it's a Safaricom line and try again.",
+        );
+      }
+      // Network failure / Daraja unreachable — not the client's fault.
+      throw new ServiceUnavailableException('M-Pesa is temporarily unavailable. Please try again shortly.');
+    }
   }
 }

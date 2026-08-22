@@ -1,6 +1,6 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { BusinessService } from './business.service';
-import { CreateBusinessDto, UpdateBusinessDto } from './dto/business.dto';
+import { CreateBusinessDto, UpdateBusinessDto, SetCoverPhotoDto } from './dto/business.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -56,6 +56,11 @@ export class BusinessController {
   @Put(':id')
   update(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: UpdateBusinessDto) {
     return this.service.update(id, user.userId, dto);
+  }
+
+  @Patch(':id/cover-photo')
+  setCoverPhoto(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: SetCoverPhotoDto) {
+    return this.service.setCoverPhoto(id, user.userId, dto);
   }
 
   // DELETE /businesses/:id — owner closes their Business Account; their
