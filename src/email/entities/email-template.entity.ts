@@ -17,6 +17,17 @@ export class EmailTemplate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  // Stable lookup handle for the 5 built-in templates (WELCOME_BUSINESS,
+  // SUSPENSION, DEACTIVATION, DISCOUNT_OFFER, FREE_TRIAL_OFFER) that the
+  // app looks up by code, not by name — an admin renaming "Business
+  // Suspended" to something friendlier shouldn't break the automatic
+  // send that happens on suspension. Null for any template an admin
+  // creates themselves through the dashboard; those are pure ad-hoc
+  // broadcasts, never looked up programmatically. See EmailService's
+  // getBuiltInTemplate.
+  @Column({ type: 'varchar', nullable: true, unique: true })
+  key: string | null;
+
   @Column()
   name: string; // admin-facing label, e.g. "Q3 Growth discount offer"
 

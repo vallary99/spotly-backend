@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Business } from '../business/entities/business.entity';
+import { EmailService } from '../email/email.service';
 
 export interface AdminBusinessFilters {
   city?: string;
@@ -21,7 +22,10 @@ export interface AdminBusinessFilters {
 
 @Injectable()
 export class AdminBusinessService {
-  constructor(@InjectRepository(Business) private businesses: Repository<Business>) {}
+  constructor(
+    @InjectRepository(Business) private businesses: Repository<Business>,
+    private email: EmailService,
+  ) {}
 
   // GET /admin/businesses — the filterable table. Every filter below is
   // an independent andWhere, so any combination applies concurrently
@@ -77,13 +81,33 @@ export class AdminBusinessService {
   }
 
   // PUT /admin/businesses/:id/suspend
-  async suspend(id: string, reason: string, until: string | null) {
-    const business = await this.businesses.findOne({ where: { id } });
+  // PUT /admin/businesses/:id/suspend — also used by the admin UI's
+  // lighter-weight "Deactivate" action (no reason required there, see
+  // SuspendBusinessDto), which is why reason defaults rather than being
+  // required at this layer too. Notifies the owner either way — an
+  // actual explanation for a real suspension, a lighter no-explanation
+  // notice for a routine deactivation — using the matching built-in
+  // template (see EmailService.sendSuspensionEmail/sendDeactivationEmail).
+  // Neither type of email existed before this; suspending/deactivating
+  // silently left the owner with no idea their listing had disappeared.
+  async suspend(id: string, reason: string | undefined, until: string | null) {
+    const business = await this.businesses.findOne({ where: { id }, relations: ['owner'] });
     if (!business) throw new NotFoundException('Business not found.');
+    const isRealSuspension = !!reason;
     business.isSuspended = true;
-    business.suspensionReason = reason;
+    business.suspensionReason = reason ?? 'Deactivated by admin.';
     business.suspendedUntil = until ? new Date(until) : null;
-    return this.businesses.save(business);
+    const saved = await this.businesses.save(business);
+
+    if (business.owner?.email) {
+      if (isRealSuspension) {
+        this.email.queueSuspensionEmail(business.owner.email, business.owner.name, business.name, reason as string);
+      } else {
+        this.email.queueDeactivationEmail(business.owner.email, business.owner.name, business.name);
+      }
+    }
+
+    return saved;
   }
 
   // PUT /admin/businesses/:id/unsuspend

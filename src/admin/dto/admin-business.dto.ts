@@ -49,8 +49,14 @@ export class AdminBusinessQueryDto {
 }
 
 export class SuspendBusinessDto {
+  // Optional: the admin "Deactivate" button (a lighter-weight, no-explanation
+  // pause — see AdminBusinessService.suspend) reuses this same endpoint
+  // without a reason. "Suspend" proper (policy violations) should still
+  // supply one so the business owner sees why. Defaults server-side when
+  // omitted — see AdminBusinessService.suspend.
+  @IsOptional()
   @IsString()
-  reason: string;
+  reason?: string;
 
   // ISO date string, or omit for an indefinite suspension an admin must
   // manually lift.

@@ -38,4 +38,9 @@ export class UpdateTierConfigDto {
   @IsArray()
   @IsString({ each: true })
   extraFeatures?: string[];
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  experienceAddonPriceKes?: number;
 }

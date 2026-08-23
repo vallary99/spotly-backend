@@ -15,11 +15,13 @@ import { AdminModerationService } from './admin-moderation.service';
 import { AdminEmailService } from './admin-email.service';
 import { AdminTransactionsService } from './admin-transactions.service';
 import { EmailModule } from '../email/email.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Business, User, UsageEvent, ModerationQueueItem, Media, EmailTemplate, EmailSendLog, Payment]),
     EmailModule,
+    SubscriptionModule,
   ],
   controllers: [AdminController],
   providers: [AdminAnalyticsService, AdminBusinessService, AdminModerationService, AdminEmailService, AdminTransactionsService],

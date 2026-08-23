@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { Resend } from 'resend';
 import { runInBackground } from '../common/utils/background.util';
+import { EmailTemplate } from './entities/email-template.entity';
 
 // Wraps Resend (resend.com) for transactional and general-update email.
 // Chosen over SES/SendGrid/Postmark for MVP because its free tier (3,000
@@ -21,7 +24,10 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private resend: Resend | null = null;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    @InjectRepository(EmailTemplate) private templates: Repository<EmailTemplate>,
+  ) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     if (apiKey) {
       this.resend = new Resend(apiKey);
@@ -63,6 +69,23 @@ export class EmailService {
     }
   }
 
+  // Looks up one of the 5 built-in templates by its stable `key` (see
+  // EmailTemplate entity) and renders {{var}} placeholders against the
+  // given values. Returns null if the row's missing (deleted, or the
+  // seed migration hasn't run yet) — every call site below falls back
+  // to a hardcoded copy in that case, so email sending never breaks
+  // just because the DB template is absent, same defensive posture as
+  // TierConfigService.getLimits' fallback to TIER_LIMITS.
+  private async renderBuiltIn(
+    key: string,
+    vars: Record<string, string>,
+  ): Promise<{ subject: string; html: string } | null> {
+    const row = await this.templates.findOne({ where: { key } });
+    if (!row) return null;
+    const render = (text: string) => text.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? '');
+    return { subject: render(row.subject), html: render(row.body) };
+  }
+
   async sendWelcomeEmail(to: string, name: string) {
     return this.send({
       to,
@@ -82,7 +105,14 @@ export class EmailService {
     });
   }
 
+  // Admin-editable via the "Welcome Email" built-in template (see
+  // spotly-admin's Email Templates page) — falls back to this
+  // hardcoded copy if that row's ever missing, so registration/business
+  // approval never breaks over an email-content edit gone wrong.
   async sendBusinessWelcomeEmail(to: string, businessName: string) {
+    const rendered = await this.renderBuiltIn('WELCOME_BUSINESS', { businessName });
+    if (rendered) return this.send({ to, ...rendered });
+
     return this.send({
       to,
       subject: `${businessName} is live on Spotly!`,
@@ -94,6 +124,33 @@ export class EmailService {
         </div>
       `,
     });
+  }
+
+  // Fired from AdminBusinessService.suspend() when an admin gives an
+  // actual reason — a real policy-violation suspension, not a routine
+  // deactivation (see sendDeactivationEmail below for that lighter
+  // case). Silently does nothing if the built-in template's missing —
+  // an admin action shouldn't throw just because a notification email
+  // couldn't be composed.
+  async sendSuspensionEmail(to: string, ownerName: string, businessName: string, reason: string) {
+    const rendered = await this.renderBuiltIn('SUSPENSION', { ownerName, businessName, reason });
+    if (!rendered) {
+      this.logger.warn(`SUSPENSION built-in template missing — no email sent to ${to}.`);
+      return { simulated: true };
+    }
+    return this.send({ to, ...rendered });
+  }
+
+  // Fired from AdminBusinessService.suspend() when no reason was given
+  // — the admin dashboard's one-click "Deactivate" action. Same
+  // fallback posture as sendSuspensionEmail.
+  async sendDeactivationEmail(to: string, ownerName: string, businessName: string) {
+    const rendered = await this.renderBuiltIn('DEACTIVATION', { ownerName, businessName });
+    if (!rendered) {
+      this.logger.warn(`DEACTIVATION built-in template missing — no email sent to ${to}.`);
+      return { simulated: true };
+    }
+    return this.send({ to, ...rendered });
   }
 
   // resetUrl is built by the caller (AuthService), which is handed the
@@ -139,6 +196,18 @@ export class EmailService {
   queueBusinessWelcomeEmail(to: string, businessName: string): void {
     runInBackground(this.logger, `welcome-business ${to}`, () =>
       this.sendBusinessWelcomeEmail(to, businessName),
+    );
+  }
+
+  queueSuspensionEmail(to: string, ownerName: string, businessName: string, reason: string): void {
+    runInBackground(this.logger, `suspension ${to}`, () =>
+      this.sendSuspensionEmail(to, ownerName, businessName, reason),
+    );
+  }
+
+  queueDeactivationEmail(to: string, ownerName: string, businessName: string): void {
+    runInBackground(this.logger, `deactivation ${to}`, () =>
+      this.sendDeactivationEmail(to, ownerName, businessName),
     );
   }
 

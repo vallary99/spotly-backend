@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, BadRequestException } from '@nestjs/common';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../auth/entities/user.entity';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -9,6 +9,9 @@ import { AdminEmailService } from './admin-email.service';
 import { AdminBusinessQueryDto, SuspendBusinessDto, SetHiddenGemDto, DiscountCampaignDto, TrialCampaignDto, TransactionQueryDto } from './dto/admin-business.dto';
 import { AdminTransactionsService } from './admin-transactions.service';
 import { CreateEmailTemplateDto, UpdateEmailTemplateDto, PreviewEmailDto, SendEmailDto } from './dto/admin-email.dto';
+import { TierConfigService } from '../subscription/tier-config.service';
+import { UpdateTierConfigDto } from '../subscription/dto/update-tier-config.dto';
+import { SubscriptionTier } from '../business/entities/business.entity';
 
 // Platform-operator-only — meant to be called from the separate
 // spotly-admin app, not the consumer app. Gated by the real ADMIN role
@@ -23,6 +26,7 @@ export class AdminController {
     private moderation: AdminModerationService,
     private adminEmail: AdminEmailService,
     private transactions: AdminTransactionsService,
+    private tierConfig: TierConfigService,
   ) {}
 
   // --- Dashboard ---
@@ -56,6 +60,20 @@ export class AdminController {
   @Put('businesses/:id/hidden-gem')
   setHiddenGem(@Param('id') id: string, @Body() dto: SetHiddenGemDto) {
     return this.adminBusiness.setHiddenGem(id, dto.value);
+  }
+
+  // --- Package pricing/limits ---
+  @Get('tier-configs')
+  getTierConfigs() {
+    return this.tierConfig.getAll();
+  }
+
+  @Put('tier-configs/:tier')
+  updateTierConfig(@Param('tier') tier: string, @Body() dto: UpdateTierConfigDto) {
+    if (!Object.values(SubscriptionTier).includes(tier as SubscriptionTier)) {
+      throw new BadRequestException(`Unknown tier "${tier}". Expected one of: ${Object.values(SubscriptionTier).join(', ')}.`);
+    }
+    return this.tierConfig.updateTier(tier as SubscriptionTier, dto);
   }
 
   // --- Reward program ---
