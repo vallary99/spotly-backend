@@ -1,13 +1,13 @@
 # Spotly API — MVP Backend
 
 A working NestJS implementation of the Spotly MVP scope defined in the PRD/BRD:
-Postgres (via TypeORM), Redis-backed BullMQ queues, a real image quality gate
+Postgres (via TypeORM), in-process background sweeps, a real image quality gate
 (resolution + blur detection + perceptual hashing via `sharp`, no third-party
-service required), and stubbed-but-structurally-real adapters for M-Pesa
-Daraja and S3-compatible object storage.
+service required), a Cloudinary-backed media store, and a
+structurally-real adapter for M-Pesa Daraja.
 
 Every route below has been manually exercised end-to-end against a live
-Postgres + Redis instance — signup → business registration → tier-limit
+Postgres instance — signup → business registration → tier-limit
 enforcement → reviews → bookmarks → payments → media quality gate → async
 duplicate-detection — not just written, but run and confirmed working.
 
@@ -27,13 +27,12 @@ architecture depends on which ORM is used.
 
 - Node.js 20+
 - PostgreSQL 14+
-- Redis 6+
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env   # then fill in real values — see checklist below
+cp .env.example .env.local   # then fill in real values — see checklist below
 ```
 
 Create the database:
@@ -43,17 +42,69 @@ CREATE USER spotly WITH PASSWORD 'your_password' CREATEDB;
 CREATE DATABASE spotly_dev OWNER spotly;
 ```
 
-Update `DATABASE_URL` in `.env` to match. Then start:
+Point `.env.local` at it (either `DATABASE_URL`, or the `POSTGRES_*`
+parts), then create the schema and start:
 
 ```bash
+npm run migration:generate   # first time only, on an empty database
+npm run migration:run
 npm run start:dev
 ```
 
-`synchronize: true` is set in `src/config/typeorm.config.ts` for this MVP
-scaffold, so tables are created automatically on first boot. **Before
-production use**, switch to real TypeORM migrations
-(`typeorm migration:generate`) so schema changes are reviewable and
-reversible instead of auto-applied.
+## Database config and migrations
+
+Configuration is per-environment, selected by `NODE_ENV`:
+
+| `NODE_ENV` | env file | migrations directory |
+|---|---|---|
+| `local` | `.env.local` | `src/database/local-migrations` (gitignored) |
+| `prod` / `production` | `.env.prod` | `src/database/migrations` (committed) |
+| unset | `.env` | `src/database/migrations` |
+
+```
+src/libs/env/env-file.ts               NODE_ENV -> which .env file
+src/database/config/data-source-options.ts   connection, SSL, entity + migration globs
+src/database/config/datasource.ts      what the TypeORM CLI uses
+src/database/config/typeorm.config.ts  what the Nest app uses
+```
+
+The app, the CLI, and the tools in `scripts/` all build on the same
+`data-source-options.ts`, so they can't end up pointed at different
+databases.
+
+**Entities live with the module that owns them**, not in one central
+folder — `src/business/entities/business.entity.ts`,
+`src/auth/entities/user.entity.ts`, and so on. They're discovered by
+convention (`src/**/*.entity.ts`, or `dist/**/*.entity.js` for the
+compiled build), so adding an entity means creating the file: there's no
+registry to update and forget.
+
+**Two migration directories, on purpose.** Local schema work is
+iterative — generate, run, revert, regenerate — and that churn has no
+business in the history that will one day run against real user data.
+So `local-migrations/` is gitignored scratch space, and when a change is
+settled you generate it once more against `prod` to produce the
+committed migration in `migrations/`.
+
+| Local (`.env.local`) | Production (`.env.prod`) |
+|---|---|
+| `npm run migration:generate` | `npm run migration:generate:prod` |
+| `npm run migration:create` | `npm run migration:create:prod` |
+| `npm run migration:run` | `npm run migration:run:prod` |
+| `npm run migration:revert` | `npm run migration:revert:prod` |
+| `npm run migration:show` | `npm run migration:show:prod` |
+
+Every CLI invocation prints which env file and migrations directory it
+picked up before it does anything, so "which database did that just run
+against?" is never a guess.
+
+`npm run migration:run:deploy` is the deployment variant: it runs the
+compiled migrations out of `dist/` with plain `node`, because the
+production image is built without dev dependencies (no `ts-node`).
+`render.yaml` wires it to `preDeployCommand`.
+
+`synchronize` is off in every environment, and nothing in the repo can
+turn it on — a migration is the only way the schema ever changes.
 
 ## What's real vs. stubbed
 
@@ -65,9 +116,9 @@ reversible instead of auto-applied.
 | Tier-limit enforcement (photos, video, concurrent experiences) | Real, server-side |
 | Image quality gate (resolution, blur via Laplacian variance) | Real — runs against actual uploaded bytes via `sharp` |
 | Perceptual hash duplicate detection | Real — proven to correctly flag reused images across businesses |
-| BullMQ queues (moderation, usage sweep, billing, experience expiry) | Real, running against Redis |
+| Background jobs (moderation, usage sweep, billing, experience expiry) | Real — in-process fire-and-forget dispatch + timer-driven sweeps (`src/tasks/`), no external broker |
 | M-Pesa Daraja STK Push + callback | Structurally real (idempotent, transactional) but **simulated** until real credentials are supplied — see checklist |
-| S3/R2 object storage | Stubbed presigned URL — needs `@aws-sdk/client-s3` wired in once credentials exist |
+| Media storage | Real — Cloudinary when `CLOUDINARY_*` is set, local disk (`./uploads`, served at `/uploads/`) otherwise |
 | Video blur/orientation check | Not implemented — needs `ffmpeg` installed to extract a frame first |
 | Google/Apple OAuth | Not implemented (intentionally, per BRD Section 11 — MVP auth is email/password on a real JWT backend) |
 
@@ -130,17 +181,20 @@ Drop these into `.env` as `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET`,
 simulating and calls the real Daraja sandbox/production API — no code
 changes needed.
 
-### 2. Object storage — AWS S3 or Cloudflare R2
-- Access Key ID
-- Secret Access Key
-- Bucket name
-- Region (or endpoint URL, for R2/MinIO)
-- Ideally a CDN domain in front of it for public media URLs
+### 2. Media storage — Cloudinary
+- Cloud name
+- API Key
+- API Secret
 
-Once you have these, install `@aws-sdk/client-s3` and
-`@aws-sdk/s3-request-presigner`, then implement the real presigned-URL
-logic in `src/media/storage.service.ts` (the real implementation is
-sketched in a comment there already).
+All three are on the Cloudinary dashboard under "API Environment
+variable". Drop them into `.env` as `CLOUDINARY_CLOUD_NAME`,
+`CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` — `StorageService` detects
+them and switches off local-disk mode automatically, no code changes
+needed. Cloudinary also serves the media over its own CDN, so there's no
+separate CDN to configure.
+
+This one isn't optional for a real deployment: without it, uploads go to
+the container's local disk and vanish on the next restart.
 
 ### 3. Google OAuth (Google Cloud Console)
 - Client ID + Client Secret
@@ -154,8 +208,6 @@ works immediately, no code changes needed.
 
 ## Known follow-ups (not blockers, but worth doing before production)
 
-- Switch `synchronize: true` to real TypeORM migrations.
-- Wire the real S3/R2 client into `StorageService`.
 - Add `ffmpeg`-based video quality checks (resolution/orientation/blur on
   an extracted frame) — currently only duration is checked for video.
 - Add IP-allowlisting for Safaricom's ranges on the `/payments/mpesa/callback`

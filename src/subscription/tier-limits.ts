@@ -1,4 +1,4 @@
-import { SubscriptionTier } from '../entities/business.entity';
+import { SubscriptionTier } from '../business/entities/business.entity';
 
 export interface TierLimit {
   priceKes: number;

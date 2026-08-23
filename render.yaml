@@ -1,18 +1,18 @@
 # Render Blueprint for spotly-api.
 #
 # Why Render (and not Vercel): this app runs a persistent HTTP server
-# (src/main.ts calls app.listen()) plus four BullMQ background workers
-# (src/queue/*.processor.ts) that continuously poll Redis for jobs.
-# Both of those need a long-lived process — the opposite of Vercel's
-# serverless model, where a function starts per-request and is frozen
-# right after responding. Render web services run your Dockerfile as
-# one always-on container, so the HTTP server and the queue workers
-# (which run inside the same Nest process here) both just work.
+# (src/main.ts calls app.listen()) plus three recurring background
+# sweeps on in-process timers (src/tasks/scheduler.service.ts). Both of
+# those need a long-lived process — the opposite of Vercel's serverless
+# model, where a function starts per-request and is frozen right after
+# responding. Render web services run your Dockerfile as one always-on
+# container, so the HTTP server and the sweeps (which run inside the
+# same Nest process) both just work.
 #
 # One-time setup after connecting this repo as a Blueprint in the
 # Render dashboard:
-#   1. Render provisions spotly-db (Postgres) and spotly-redis
-#      (Key Value) automatically — no action needed for those.
+#   1. Render provisions spotly-db (Postgres) automatically — no action
+#      needed there.
 #   2. Fill in the `sync: false` variables below in the dashboard
 #      (Cloudinary, Resend, M-Pesa, Google OAuth credentials) — these
 #      are secrets, so they're deliberately not in this file.
@@ -29,32 +29,30 @@ services:
     name: spotly-api
     runtime: docker
     plan: starter # NOT free — free web services spin down after 15 min
-    # idle, which would kill the BullMQ workers running inside this
-    # same process (moderation, usage tracking, billing renewals,
-    # experience expiry never firing while the service is asleep).
+    # idle, which would stop the sweep timers running inside this same
+    # process (usage rollups, billing downgrades, and experience expiry
+    # never firing while the service is asleep).
     region: oregon
     healthCheckPath: /health
+    # Runs the committed migrations (src/database/migrations, compiled to
+    # dist/) against the live database before the new build takes over
+    # traffic. Uses the compiled runner because the runtime image is
+    # built with `npm install --omit=dev` — ts-node isn't there.
+    preDeployCommand: npm run migration:run:deploy
     envVars:
+      - key: NODE_ENV
+        value: "production" # selects .env.prod locally; on Render there's no
+        # file, so the injected variables below are used directly. Also what
+        # tells the migration runner to use the committed migrations rather
+        # than anyone's local-migrations.
       - key: DATABASE_URL
         fromDatabase:
           name: spotly-db
           property: connectionString
-      - key: REDIS_HOST
-        fromService:
-          type: keyvalue
-          name: spotly-redis
-          property: host
-      - key: REDIS_PORT
-        fromService:
-          type: keyvalue
-          name: spotly-redis
-          property: port
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
         value: "7d"
-      - key: STORAGE_PROVIDER
-        value: "cloudinary"
       - key: CLOUDINARY_CLOUD_NAME
         sync: false
       - key: CLOUDINARY_API_KEY
@@ -87,17 +85,6 @@ services:
         sync: false
       - key: MPESA_CALLBACK_URL
         value: "https://spotly-api.onrender.com/payment/mpesa/callback" # verify/update per step 3 above; confirm path matches payment.controller.ts
-
-  # Key Value (Render's managed Redis-compatible offering) — required
-  # by the BullMQ queues (src/queue/queue.module.ts). ipAllowList is
-  # mandatory for Key Value instances; empty means "internal access
-  # only," which is all the API needs since it connects over Render's
-  # private network.
-  - type: keyvalue
-    name: spotly-redis
-    plan: starter
-    region: oregon
-    ipAllowList: []
 
 databases:
   - name: spotly-db

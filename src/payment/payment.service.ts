@@ -1,13 +1,11 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { Payment, PaymentStatus, PaymentPurpose } from '../entities/payment.entity';
-import { Business, SubscriptionStatus, SubscriptionTier } from '../entities/business.entity';
+import { Payment, PaymentStatus, PaymentPurpose } from './entities/payment.entity';
+import { Business, SubscriptionStatus, SubscriptionTier } from '../business/entities/business.entity';
 import { DarajaService } from './daraja.service';
 import { InitiatePaymentDto } from './dto/payment.dto';
 import { TierConfigService } from '../subscription/tier-config.service';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
 import { normalizeKenyanMsisdn } from '../common/utils/phone.util';
 
 @Injectable()
@@ -20,7 +18,6 @@ export class PaymentService {
     private daraja: DarajaService,
     private dataSource: DataSource,
     private tierConfig: TierConfigService,
-    @InjectQueue('billing') private billingQueue: Queue,
   ) {}
 
   // POST /payments/mpesa/stk-push — FR-13.1: subscription upgrades and
@@ -169,18 +166,15 @@ export class PaymentService {
     };
   }
 
-  // Scheduled sweep (see billing queue processor): missed-payment grace
-  // period per FR-12.4 — never deletes content, only soft-downgrades.
+  // Missed-payment grace period per FR-12.4 — never deletes content,
+  // only soft-downgrades. Setting gracePeriodEndsAt is all that's needed
+  // to arm the downgrade: BillingService.sweepExpiredGracePeriods()
+  // (run hourly by SchedulerService) picks up whatever has come due.
   async applyGracePeriod(businessId: string) {
     const business = await this.businesses.findOne({ where: { id: businessId } });
     if (!business) return;
     business.subscriptionStatus = SubscriptionStatus.GRACE_PERIOD;
     business.gracePeriodEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7-day grace period
     await this.businesses.save(business);
-    await this.billingQueue.add(
-      'check-grace-period-expiry',
-      { businessId },
-      { delay: 7 * 24 * 60 * 60 * 1000 },
-    );
   }
 }

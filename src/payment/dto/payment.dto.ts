@@ -1,6 +1,6 @@
 import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
-import { PaymentPurpose } from '../../entities/payment.entity';
-import { SubscriptionTier } from '../../entities/business.entity';
+import { PaymentPurpose } from '../entities/payment.entity';
+import { SubscriptionTier } from '../../business/entities/business.entity';
 
 export class InitiatePaymentDto {
   @IsString()

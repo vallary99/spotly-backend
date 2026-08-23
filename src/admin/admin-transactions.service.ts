@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Payment } from '../entities/payment.entity';
+import { Payment } from '../payment/entities/payment.entity';
 
 export interface TransactionFilters {
   status?: string;

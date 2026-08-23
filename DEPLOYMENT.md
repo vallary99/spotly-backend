@@ -6,31 +6,31 @@ visiting the URL in a browser shows JSON (e.g. `GET /` returns
 endpoints with `curl`, Postman, or a frontend that consumes them — not
 browsing pages.
 
-## Recommended: Railway (easiest — one platform for API + Postgres + Redis)
+## Recommended: Railway (easiest — one platform for API + Postgres)
 
-Railway can provision Postgres, Redis, and your Node service together,
-and it builds directly from the included `Dockerfile`.
+Railway can provision Postgres and your Node service together, and it
+builds directly from the included `Dockerfile`.
 
 1. Push this project to a GitHub repo.
 2. Go to [railway.app](https://railway.app), create a new project, and
    choose "Deploy from GitHub repo" — select this repo.
-3. In the same project, click **+ New → Database → PostgreSQL**, and
-   separately **+ New → Database → Redis**. Railway auto-generates
-   connection strings for both.
+3. In the same project, click **+ New → Database → PostgreSQL**.
+   Railway auto-generates the connection string.
 4. On your API service, go to **Variables** and set:
    - `DATABASE_URL` → reference the Postgres service's `DATABASE_URL`
      variable (Railway lets you reference other services' variables
      directly, e.g. `${{Postgres.DATABASE_URL}}`)
-   - `REDIS_HOST` / `REDIS_PORT` → from the Redis service's connection
-     info (or just `${{Redis.REDIS_URL}}` if you switch the Redis config
-     in `queue.module.ts` to parse a single URL instead of host/port —
-     either works, host/port is simpler to leave as-is)
    - `JWT_SECRET` → generate a real random string, don't reuse the dev one
    - `PORT` → Railway sets this automatically; you generally don't need
      to set it yourself
-   - Everything else from `.env.example` (M-Pesa, storage, etc.) — leave
+   - `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` /
+     `CLOUDINARY_API_SECRET` → set these before you upload anything you
+     care about. Without them, media is written to the container's local
+     disk, which is wiped on every deploy and restart.
+   - `NODE_ENV` → `production`
+   - Everything else from `.env.example` (M-Pesa, OAuth, etc.) — leave
      blank until you have real credentials; the app runs fine without
-     them (payments/storage just stay in simulated mode)
+     them (payments and OAuth stay in a clearly-labeled simulated mode)
 5. Railway builds the `Dockerfile` and deploys. Once live, it gives you a
    public URL like `https://spotly-api-production.up.railway.app`.
 6. Test it:
@@ -42,30 +42,36 @@ and it builds directly from the included `Dockerfile`.
 ## Alternative: Render
 
 Same shape as Railway — connect the GitHub repo, add a PostgreSQL
-instance and a Redis instance from Render's dashboard (both have free
-tiers), set the same environment variables, and Render builds the
-`Dockerfile` automatically. Render's free tier spins down when idle,
-so the first request after inactivity will be slow (~30s cold start) —
-fine for testing, not for a real launch.
+instance from Render's dashboard, set the same environment variables,
+and Render builds the `Dockerfile` automatically. The included
+`render.yaml` Blueprint does all of this for you. Render's free tier
+spins down when idle, so the first request after inactivity will be slow
+(~30s cold start) — and, more importantly, the recurring sweeps in
+`src/tasks/scheduler.service.ts` don't run while the service is asleep,
+which is why `render.yaml` specifies the `starter` plan.
 
 ## Alternative: Fly.io (more control, still simple)
 
 ```bash
 fly launch          # detects the Dockerfile, asks region/name
 fly postgres create # provision Postgres, attach it
-fly redis create    # provision Upstash Redis, attach it
 fly secrets set JWT_SECRET=your-real-secret
 fly deploy
 ```
 
 ## Before you go live for real (not just testing)
 
-- **Migrations, not `synchronize: true`.** Right now
-  `src/config/typeorm.config.ts` has `synchronize: true`, which
-  auto-creates/alters tables from the entity definitions — fine for
-  development, dangerous in production (a bad entity change can silently
-  drop a column). Switch to `typeorm migration:generate` +
-  `typeorm migration:run` before real data is on the line.
+- **Run the migrations.** `synchronize` is off everywhere, so the
+  schema comes entirely from `src/database/migrations/` (the committed,
+  reviewed set — separate from the gitignored `local-migrations/` used
+  for day-to-day development). The included `render.yaml` runs them via
+  `preDeployCommand: npm run migration:run:deploy` before each new build
+  takes traffic. On any other host, run that same command as a deploy
+  step — it uses plain `node` against the compiled migrations in
+  `dist/`, since the production image has no dev dependencies. To run
+  them from your laptop against the live database instead, put its
+  credentials in `.env.prod` (with `DATABASE_SSL=true`) and use
+  `npm run migration:run:prod`.
 - **A real `JWT_SECRET`.** Generate one with
   `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
   — never reuse the placeholder from `.env.example`.

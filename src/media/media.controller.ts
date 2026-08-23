@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Param, Post, Query, UploadedFile, UseIntercep
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MediaService } from './media.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { MediaType } from '../entities/media.entity';
+import { MediaType } from './entities/media.entity';
 
 @Controller('businesses/:id/media')
 export class MediaController {
@@ -18,11 +18,9 @@ export class MediaController {
     return this.service.getUploadUrl(businessId, user.userId, type, ext);
   }
 
-  // multipart upload straight into the quality gate — in production the
-  // client uploads directly to the presigned URL and only pings this
-  // endpoint with the resulting key + a copy of the buffer for checking,
-  // but accepting the file directly here keeps the MVP scaffold testable
-  // without a real S3 bucket wired up.
+  // multipart upload straight into the quality gate: the client POSTs the
+  // bytes here with the key returned by /upload-url, and the backend runs
+  // the quality check before persisting anything to storage.
   @Post()
   @UseInterceptors(FileInterceptor('file'))
   async submit(

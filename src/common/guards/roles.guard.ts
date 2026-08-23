@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
-import { UserRole } from '../../entities/user.entity';
+import { UserRole } from '../../auth/entities/user.entity';
 
 // Enforces e.g. "Creating an experience shall require an active Business
 // Account" (FR-9.1) — plain Registered Users are rejected with 403.

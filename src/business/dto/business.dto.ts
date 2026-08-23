@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString, IsArray, IsNumber, IsObject, IsBoolean } from 'class-validator';
-import { BusinessType } from '../../entities/business.entity';
+import { BusinessType } from '../entities/business.entity';
 
 export class CreateBusinessDto {
   @IsEnum(BusinessType)

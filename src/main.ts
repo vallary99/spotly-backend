@@ -16,9 +16,9 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new DatabaseExceptionFilter());
   // Serves locally-persisted media uploads (see StorageService) at
-  // /uploads/... when no real S3/R2 is configured — this is what makes
+  // /uploads/... when Cloudinary isn't configured — this is what makes
   // uploaded photos actually render in local development. Irrelevant
-  // once real cloud storage is wired up; nothing gets written here then.
+  // once Cloudinary is wired up; nothing gets written here then.
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
   const port = process.env.PORT ?? 3000;
   await app.listen(port);

@@ -1,14 +1,13 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Business } from '../entities/business.entity';
-import { Experience } from '../entities/experience.entity';
-import { User, UserRole } from '../entities/user.entity';
-import { UsageEvent } from '../entities/usage-event.entity';
-import { Media, MediaStatus, MediaType } from '../entities/media.entity';
+import { Business } from './entities/business.entity';
+import { Experience } from '../experience/entities/experience.entity';
+import { User, UserRole } from '../auth/entities/user.entity';
+import { UsageEvent } from '../tasks/entities/usage-event.entity';
+import { Media, MediaStatus, MediaType } from '../media/entities/media.entity';
 import { CreateBusinessDto, UpdateBusinessDto, SetCoverPhotoDto } from './dto/business.dto';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+import { UsageService } from '../tasks/usage.service';
 import { EmailService } from '../email/email.service';
 
 // Seed categories shown even before any business has picked them —
@@ -125,7 +124,7 @@ export class BusinessService {
     @InjectRepository(Experience) private experiences: Repository<Experience>,
     @InjectRepository(UsageEvent) private usageEvents: Repository<UsageEvent>,
     @InjectRepository(Media) private media: Repository<Media>,
-    @InjectQueue('usage') private usageQueue: Queue,
+    private usage: UsageService,
     private email: EmailService,
   ) {}
 
@@ -155,7 +154,7 @@ export class BusinessService {
     await this.users.update(userId, { role: UserRole.BUSINESS_OWNER });
     const owner = await this.users.findOne({ where: { id: userId } });
     if (owner) {
-      await this.email.queueBusinessWelcomeEmail(owner.email, business.name);
+      this.email.queueBusinessWelcomeEmail(owner.email, business.name);
     }
     return business;
   }
@@ -167,8 +166,8 @@ export class BusinessService {
   //
   // Only businesses with at least one APPROVED photo are returned here —
   // a business with no real photo yet either shows a placeholder image
-  // that misrepresents it, or (once real S3 is configured) a broken
-  // image entirely. Rather than either, it simply doesn't appear in
+  // that misrepresents it, or a broken image entirely. Rather than
+  // either, it simply doesn't appear in
   // public discovery until the owner adds one; it's still fully visible
   // to the owner themselves via the dashboard. See applyListingFilters()
   // below for the exact check.
@@ -202,7 +201,7 @@ export class BusinessService {
   }
 
   // GET /businesses/:id — records a view event (async, swept into
-  // profileViews by the usage queue) rather than incrementing live.
+  // profileViews by the usage sweep) rather than incrementing live.
   // profileViews/savesCount only appear in the response when the
   // requester is the business's own owner; everyone else sees the
   // business without those two fields.
@@ -214,7 +213,7 @@ export class BusinessService {
     if (!business) {
       throw new NotFoundException('Business not found.');
     }
-    await this.usageQueue.add('record-event', { businessId: id, type: 'view' });
+    this.usage.queueEvent(id, 'view');
 
     const [withRating] = await this.attachRatingsAndStripMetrics([business], {
       keepMetricsFor: requestingUserId,
@@ -301,8 +300,8 @@ export class BusinessService {
     return { deleted: true };
   }
 
-  async recordSave(businessId: string) {
-    await this.usageQueue.add('record-event', { businessId, type: 'save' });
+  recordSave(businessId: string) {
+    this.usage.queueEvent(businessId, 'save');
   }
 
   // Shared by findAll() and HomeService's rails — keeps the "must have

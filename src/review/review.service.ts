@@ -1,8 +1,8 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Review } from '../entities/review.entity';
-import { Business } from '../entities/business.entity';
+import { Review } from './entities/review.entity';
+import { Business } from '../business/entities/business.entity';
 import { CreateReviewDto } from './dto/review.dto';
 
 @Injectable()

@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
-import { User, UserRole } from '../entities/user.entity';
+import { User, UserRole } from './entities/user.entity';
 import { SignupDto, LoginDto } from './dto/auth.dto';
 import { EmailService } from '../email/email.service';
 
@@ -34,7 +34,7 @@ export class AuthService {
         role: UserRole.REGISTERED,
       }),
     );
-    await this.email.queueWelcomeEmail(user.email, user.name);
+    this.email.queueWelcomeEmail(user.email, user.name);
     return this.issueToken(user);
   }
 
@@ -62,7 +62,7 @@ export class AuthService {
       user.passwordResetExpiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
       await this.users.save(user);
       const resetUrl = `${resetUrlBase.replace(/\/$/, '')}/reset-password?token=${token}`;
-      await this.email.queuePasswordResetEmail(user.email, user.name, resetUrl);
+      this.email.queuePasswordResetEmail(user.email, user.name, resetUrl);
     }
     return { message: "If that email has an account, we've sent a reset link." };
   }
@@ -102,7 +102,7 @@ export class AuthService {
           // any other password reset.
         }),
       );
-      await this.email.queueWelcomeEmail(user.email, user.name);
+      this.email.queueWelcomeEmail(user.email, user.name);
     }
     return this.issueToken(user);
   }

@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Business } from '../entities/business.entity';
-import { Experience } from '../entities/experience.entity';
+import { Business } from '../business/entities/business.entity';
+import { Experience } from '../experience/entities/experience.entity';
 
 // The tsvector expression here has to stay in sync with the one in
 // migration AddBusinessSearchIndex — same weighting, same columns —
