@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { EmailTemplate } from '../entities/email-template.entity';
-import { EmailSendLog } from '../entities/email-send-log.entity';
+import { EmailTemplate } from '../email/entities/email-template.entity';
+import { EmailSendLog } from '../email/entities/email-send-log.entity';
 import { EmailService } from '../email/email.service';
 import { AdminBusinessService, AdminBusinessFilters } from './admin-business.service';
 
@@ -122,7 +122,7 @@ export class AdminEmailService {
     for (const business of results) {
       if (!business.ownerEmail) continue; // shouldn't happen (every business has an owner), but never let one bad row break the whole batch
       const vars = { ...business, businessName: business.name, ownerName: (business as any).ownerName };
-      await this.email.queueGeneralEmail(
+      this.email.queueGeneralEmail(
         business.ownerEmail,
         this.renderTemplate(subject, vars),
         this.renderTemplate(body, vars),

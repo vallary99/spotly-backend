@@ -4,8 +4,8 @@ This covers both projects (`spotly-api` and `spotly-web`) on a fresh
 machine, in order, so you can click through the whole product yourself.
 
 Tested on macOS and Ubuntu/Debian-based Linux. Windows works fine too —
-use WSL2 for the Postgres/Redis steps, since native Windows service
-management for those differs.
+use WSL2 for the Postgres steps, since native Windows service
+management for it differs.
 
 ---
 
@@ -15,31 +15,27 @@ Install these first:
 
 - **Node.js 20+** — check with `node --version`
 - **PostgreSQL 14+**
-- **Redis 6+**
 - **npm** (comes with Node)
 
 ### macOS (Homebrew)
 
 ```bash
-brew install node postgresql@16 redis
+brew install node postgresql@16
 brew services start postgresql@16
-brew services start redis
 ```
 
 ### Ubuntu / Debian / WSL2
 
 ```bash
 sudo apt update
-sudo apt install -y postgresql redis-server
+sudo apt install -y postgresql
 sudo service postgresql start
-sudo service redis-server start
 ```
 
-Verify both are running:
+Verify it's running:
 
 ```bash
 pg_isready          # should print "accepting connections"
-redis-cli ping       # should print "PONG"
 ```
 
 ---
@@ -67,21 +63,29 @@ cd spotly-api
 npm install
 ```
 
-Copy the example env file and edit it:
+Copy the example env file. Which file the app reads is decided by
+`NODE_ENV` — `local` reads `.env.local`, `prod` reads `.env.prod`, and
+`npm run start:dev` sets `NODE_ENV=local` for you:
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
 
-Open `.env` and set at minimum:
+Open `.env.local` and set at minimum:
 
 ```bash
-DATABASE_URL="postgresql://spotly:your_password_here@localhost:5432/spotly_dev"
-REDIS_HOST=localhost
-REDIS_PORT=6379
+NODE_ENV=local
+POSTGRES_HOST="localhost"
+POSTGRES_PORT=5432
+POSTGRES_DB="spotly_dev"
+POSTGRES_USER="spotly"
+POSTGRES_PASSWORD="your_password_here"
 JWT_SECRET="generate-a-real-random-string-here"
 FRONTEND_URL="http://localhost:3001"
 ```
+
+(A single `DATABASE_URL` works too, and takes precedence when set —
+that's what hosted providers hand you.)
 
 Generate a real `JWT_SECRET` with:
 
@@ -89,10 +93,27 @@ Generate a real `JWT_SECRET` with:
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Everything else in `.env` (M-Pesa, S3/R2, Google/Apple) can stay blank
-for now — see Section 6 below for wiring those in later. The app runs
-fully without them; payments and OAuth just operate in a clearly-labeled
-simulated mode.
+Everything else in `.env.local` (M-Pesa, Cloudinary, Google/Apple) can
+stay blank for now — see Section 6 below for wiring those in later. The app
+runs fully without them; payments and OAuth operate in a clearly-labeled
+simulated mode, and media uploads are written to `./uploads` and served
+from `/uploads/`.
+
+Create the schema. Your local migrations live in
+`src/database/local-migrations/`, which is gitignored and starts empty —
+so on a fresh database you generate the initial one from the entities,
+then run it:
+
+```bash
+npm run migration:generate   # first time only
+npm run migration:run
+```
+
+From then on it's `migration:generate` after an entity change,
+`migration:run` to apply, `migration:revert` to undo. When a schema
+change is ready to ship, generate it once more against production
+(`npm run migration:generate:prod`) — that writes the reviewed,
+committed copy into `src/database/migrations/`.
 
 Start the backend:
 
@@ -149,11 +170,11 @@ You should see:
 using. Either:
 
 - Run the frontend on a different port: `npm run dev -- -p 3001`, or
-- Change the backend's `PORT` in its `.env` to something else and
+- Change the backend's `PORT` in its `.env.local` to something else and
   update `NEXT_PUBLIC_API_URL` to match.
 
 If you use port 3001 for the frontend, also update the backend's
-`FRONTEND_URL` in `.env` to `http://localhost:3001` so OAuth redirects
+`FRONTEND_URL` in `.env.local` to `http://localhost:3001` so OAuth redirects
 land in the right place.
 
 ---
@@ -199,7 +220,7 @@ development and testing without any of it.
    APIs & Services → Credentials → Create OAuth Client ID (Web
    application).
 2. Authorized redirect URI: `http://localhost:3000/auth/google/callback`
-3. Copy the Client ID and Secret into the backend's `.env`:
+3. Copy the Client ID and Secret into the backend's `.env.local`:
    ```
    GOOGLE_CLIENT_ID="..."
    GOOGLE_CLIENT_SECRET="..."
@@ -213,23 +234,27 @@ Shortcode, Passkey, and a publicly-reachable callback URL (Daraja can't
 reach `localhost`, so you'll need `ngrok` or a real deployment for this
 one specifically).
 
-### Object storage (S3 / Cloudflare R2)
-Also in `spotly-api/README.md` — needed for the media upload URLs to
-point at real storage instead of the simulated presigned URL.
+### Media storage (Cloudinary)
+Also in `spotly-api/README.md` — only needed once you deploy, since
+local disk works fine while developing. Set `CLOUDINARY_CLOUD_NAME`,
+`CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` and uploads start
+going to Cloudinary instead of `./uploads`.
 
 ---
 
 ## 7. Troubleshooting
 
 **"Cannot connect to database" on backend start**
-Postgres isn't running, or the credentials in `DATABASE_URL` don't
+Postgres isn't running, or the credentials in `.env.local` don't
 match what you created in Section 2. Run `pg_isready` to check the
 service, and `psql -U spotly -d spotly_dev -h localhost` to test the
 credentials directly (it'll prompt for the password).
 
-**Backend starts but `/health` hangs or 500s**
-Usually Redis isn't running — BullMQ (the job queue) needs it at
-startup. Run `redis-cli ping` to confirm.
+**Uploaded photos 404 when the frontend tries to load them**
+In local-disk mode the API serves uploads from its own `/uploads/`
+route, so the URL is built from `PUBLIC_API_URL` (defaulting to
+`http://localhost:$PORT`). If the API isn't on port 3000, set
+`PUBLIC_API_URL` in `.env.local` to match.
 
 **Frontend loads but looks unstyled / icons missing**
 Bootstrap Icons and the Cinzel/Inter fonts load from public CDNs

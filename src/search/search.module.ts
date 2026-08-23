@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Business } from '../entities/business.entity';
-import { Experience } from '../entities/experience.entity';
+import { Business } from '../business/entities/business.entity';
+import { Experience } from '../experience/entities/experience.entity';
 import { SearchService } from './search.service';
 import { SearchController } from './search.controller';
 

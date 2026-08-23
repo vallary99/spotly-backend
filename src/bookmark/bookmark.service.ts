@@ -1,8 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Bookmark } from '../entities/bookmark.entity';
-import { Business } from '../entities/business.entity';
+import { Bookmark } from './entities/bookmark.entity';
+import { Business } from '../business/entities/business.entity';
 import { CreateBookmarkDto } from './dto/bookmark.dto';
 import { BusinessService } from '../business/business.service';
 
@@ -48,7 +48,7 @@ export class BookmarkService {
       }),
     );
     if (dto.businessId) {
-      await this.businessService.recordSave(dto.businessId);
+      this.businessService.recordSave(dto.businessId);
     }
     return saved;
   }

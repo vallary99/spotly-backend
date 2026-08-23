@@ -10,8 +10,8 @@
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
+    "start:dev": "NODE_ENV=local nest start --watch",
+    "start:debug": "NODE_ENV=local nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
@@ -19,18 +19,24 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "grant-admin": "ts-node scripts/grant-admin.ts",
-    "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts",
-    "migration:generate": "npm run typeorm -- migration:generate",
-    "migration:create": "npm run typeorm -- migration:create",
-    "migration:run": "npm run typeorm -- migration:run",
-    "migration:revert": "npm run typeorm -- migration:revert",
-    "sync-schema": "ts-node scripts/sync-schema.ts"
+    "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d ./src/database/config/datasource.ts",
+    "typeorm:local": "NODE_ENV=local ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d ./src/database/config/datasource.ts",
+    "migration:generate": "npm run typeorm:local -- migration:generate src/database/local-migrations/Migration",
+    "migration:create": "npm run typeorm:local -- migration:create src/database/local-migrations/Migration",
+    "migration:run": "npm run typeorm:local -- migration:run",
+    "migration:revert": "npm run typeorm:local -- migration:revert",
+    "migration:show": "npm run typeorm:local -- migration:show",
+    "typeorm:prod": "NODE_ENV=prod ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d ./src/database/config/datasource.ts",
+    "migration:generate:prod": "npm run typeorm:prod -- migration:generate src/database/migrations/Migration",
+    "migration:create:prod": "npm run typeorm:prod -- migration:create src/database/migrations/Migration",
+    "migration:run:prod": "npm run typeorm:prod -- migration:run",
+    "migration:revert:prod": "npm run typeorm:prod -- migration:revert",
+    "migration:show:prod": "npm run typeorm:prod -- migration:show",
+    "migration:run:deploy": "node ./node_modules/typeorm/cli.js -d dist/database/config/datasource.js migration:run",
+    "grant-admin": "NODE_ENV=local ts-node -r tsconfig-paths/register scripts/grant-admin.ts",
+    "grant-admin:prod": "NODE_ENV=prod ts-node -r tsconfig-paths/register scripts/grant-admin.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1106.0",
-    "@aws-sdk/s3-request-presigner": "^3.1106.0",
-    "@nestjs/bullmq": "^11.0.5",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -40,11 +46,9 @@
     "@nestjs/typeorm": "^11.0.3",
     "axios": "^1.19.0",
     "bcrypt": "^6.0.0",
-    "bullmq": "^6.0.9",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "cloudinary": "^2.10.0",
-    "ioredis": "^6.0.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "passport-jwt": "^4.0.1",
@@ -83,11 +87,6 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
-  },
-  "overrides": {
-    "typeorm": {
-      "ioredis": "^6.0.0"
-    }
   },
   "jest": {
     "moduleFileExtensions": [

@@ -38,7 +38,12 @@ export class HealthController {
         configured: has('MPESA_CONSUMER_KEY') && has('MPESA_CONSUMER_SECRET'),
       },
       storage: {
-        configured: has('STORAGE_ACCESS_KEY_ID') && has('STORAGE_SECRET_ACCESS_KEY'),
+        // Cloudinary is the only configurable backend; unconfigured means
+        // uploads land on local disk (fine for dev, not for production).
+        configured:
+          has('CLOUDINARY_CLOUD_NAME') &&
+          has('CLOUDINARY_API_KEY') &&
+          has('CLOUDINARY_API_SECRET'),
       },
       email: {
         configured: has('RESEND_API_KEY'),

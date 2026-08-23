@@ -1,8 +1,8 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
-import { Experience } from '../entities/experience.entity';
-import { Business } from '../entities/business.entity';
+import { Experience } from './entities/experience.entity';
+import { Business } from '../business/entities/business.entity';
 import { CreateExperienceDto, UpdateExperienceDto } from './dto/experience.dto';
 import { randomUUID } from 'crypto';
 import { TierConfigService } from '../subscription/tier-config.service';
@@ -34,7 +34,7 @@ export class ExperienceService {
       throw new BadRequestException(check.reason);
     }
     const storageKey = `businesses/${businessId}/experiences/${randomUUID()}.jpg`;
-    await this.storage.saveLocalFile(buffer, storageKey);
+    await this.storage.saveFile(buffer, storageKey);
     const url = this.storage.publicUrlForKey(storageKey);
     return { url, storageKey };
   }

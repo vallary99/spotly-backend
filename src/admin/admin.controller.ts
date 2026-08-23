@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '../entities/user.entity';
+import { UserRole } from '../auth/entities/user.entity';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminBusinessService } from './admin-business.service';

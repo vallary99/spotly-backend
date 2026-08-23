@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
 import { Resend } from 'resend';
+import { runInBackground } from '../common/utils/background.util';
 
 // Wraps Resend (resend.com) for transactional and general-update email.
 // Chosen over SES/SendGrid/Postmark for MVP because its free tier (3,000
@@ -22,10 +21,7 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private resend: Resend | null = null;
 
-  constructor(
-    private config: ConfigService,
-    @InjectQueue('email') private emailQueue: Queue,
-  ) {
+  constructor(private config: ConfigService) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     if (apiKey) {
       this.resend = new Resend(apiKey);
@@ -37,7 +33,9 @@ export class EmailService {
     // with no setup, but only delivers to the account owner's own email
     // during testing — verify your own domain in the Resend dashboard
     // and set EMAIL_FROM before relying on this for real users.
-    return this.config.get<string>('EMAIL_FROM') || 'Spotly <onboarding@resend.dev>';
+    return (
+      this.config.get<string>('EMAIL_FROM') || 'Spotly <onboarding@resend.dev>'
+    );
   }
 
   async send(params: { to: string; subject: string; html: string }) {
@@ -58,7 +56,9 @@ export class EmailService {
     } catch (err) {
       // Email failures should never break the request that triggered
       // them (signup, business registration, etc.) — log and move on.
-      this.logger.error(`Failed to send email to ${params.to}: ${(err as Error).message}`);
+      this.logger.error(
+        `Failed to send email to ${params.to}: ${(err as Error).message}`,
+      );
       return { simulated: false, failed: true };
     }
   }
@@ -121,32 +121,49 @@ export class EmailService {
     });
   }
 
-  // ---------- Queue-and-forget helpers ----------
-  // Other modules (AuthService, BusinessService) call these instead of
-  // send()/sendWelcomeEmail() directly, so a slow or failing email API
-  // call never adds latency to the request that triggered it (signup,
-  // business registration). The EmailProcessor picks these up async.
+  // ---------- Fire-and-forget helpers ----------
+  // Other modules (AuthService, BusinessService, AdminEmailService) call
+  // these instead of send()/sendWelcomeEmail() directly, so a slow or
+  // failing email API call never adds latency to the request that
+  // triggered it (signup, business registration). These used to enqueue
+  // a BullMQ job; they now dispatch in-process and return immediately.
+  // Delivery is best-effort either way — send() already swallows and
+  // logs API failures rather than retrying.
 
-  async queueWelcomeEmail(to: string, name: string) {
-    await this.emailQueue.add('welcome-user', { to, name });
+  queueWelcomeEmail(to: string, name: string): void {
+    runInBackground(this.logger, `welcome-user ${to}`, () =>
+      this.sendWelcomeEmail(to, name),
+    );
   }
 
-  async queueBusinessWelcomeEmail(to: string, businessName: string) {
-    await this.emailQueue.add('welcome-business', { to, businessName });
+  queueBusinessWelcomeEmail(to: string, businessName: string): void {
+    runInBackground(this.logger, `welcome-business ${to}`, () =>
+      this.sendBusinessWelcomeEmail(to, businessName),
+    );
   }
 
-  async queuePasswordResetEmail(to: string, name: string, resetUrl: string) {
-    await this.emailQueue.add('password-reset', { to, name, resetUrl });
+  queuePasswordResetEmail(to: string, name: string, resetUrl: string): void {
+    runInBackground(this.logger, `password-reset ${to}`, () =>
+      this.sendPasswordResetEmail(to, name, resetUrl),
+    );
   }
 
   // For general updates/announcements — e.g. a loop calling this once
   // per recipient to broadcast a platform update, since there's no
   // in-app notification system in MVP (BRD Section 19).
-  async queueGeneralEmail(to: string, subject: string, html: string) {
-    await this.emailQueue.add('general', { to, subject, html });
+  queueGeneralEmail(to: string, subject: string, html: string): void {
+    runInBackground(this.logger, `general ${to}`, () =>
+      this.send({ to, subject, html }),
+    );
   }
 }
 
 function escapeHtml(str: string): string {
-  return str.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+  return str.replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
+        c
+      ] as string,
+  );
 }

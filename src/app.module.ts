@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
-import typeormConfig from './config/typeorm.config';
+import typeormConfig from './database/config/typeorm.config';
+import { getEnvFile } from './libs/env/env-file';
 
 import { AuthModule } from './auth/auth.module';
 import { BusinessModule } from './business/business.module';
@@ -14,7 +15,7 @@ import { SubscriptionModule } from './subscription/subscription.module';
 import { PaymentModule } from './payment/payment.module';
 import { MediaModule } from './media/media.module';
 import { HomeModule } from './home/home.module';
-import { QueueModule } from './queue/queue.module';
+import { TasksModule } from './tasks/tasks.module';
 import { AdminModule } from './admin/admin.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -23,11 +24,24 @@ import { HealthController } from './health.controller';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [typeormConfig] }),
-    TypeOrmModule.forRootAsync({
-      useFactory: () => typeormConfig(),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [typeormConfig],
+      // NODE_ENV picks the env file: local → .env.local, prod →
+      // .env.prod, unset → .env. A deployed environment that injects
+      // real env vars instead of shipping a file still works — a missing
+      // file is a no-op, and real env vars always win over file values.
+      envFilePath: getEnvFile(),
     }),
-    QueueModule,
+    TypeOrmModule.forRootAsync({
+      // Pulled from ConfigService rather than calling typeormConfig()
+      // directly, so the env file is guaranteed loaded before the
+      // connection options are read.
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        config.get<TypeOrmModuleOptions>('typeorm')!,
+    }),
+    TasksModule,
     AuthModule,
     BusinessModule,
     ExperienceModule,

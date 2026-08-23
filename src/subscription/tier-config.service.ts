@@ -1,8 +1,8 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { TierConfig } from '../entities/tier-config.entity';
-import { SubscriptionTier } from '../entities/business.entity';
+import { TierConfig } from './entities/tier-config.entity';
+import { SubscriptionTier } from '../business/entities/business.entity';
 import { TIER_LIMITS, TierLimit } from './tier-limits';
 
 // Single source of truth for subscription tier pricing/limits, backed by

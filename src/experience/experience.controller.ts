@@ -5,7 +5,7 @@ import { CreateExperienceDto, UpdateExperienceDto } from './dto/experience.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { UserRole } from '../entities/user.entity';
+import { UserRole } from '../auth/entities/user.entity';
 
 @Controller()
 export class ExperienceController {

@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ModerationQueueItem } from '../entities/moderation-queue-item.entity';
-import { Media, MediaStatus } from '../entities/media.entity';
+import { ModerationQueueItem } from '../tasks/entities/moderation-queue-item.entity';
+import { Media, MediaStatus } from '../media/entities/media.entity';
 
 @Injectable()
 export class AdminModerationService {

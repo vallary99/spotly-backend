@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Business, SubscriptionTier } from '../entities/business.entity';
+import { Business, SubscriptionTier } from '../business/entities/business.entity';
 import { UPGRADE_THRESHOLD, TierLimit } from './tier-limits';
 import { TierConfigService } from './tier-config.service';
 
