@@ -1,5 +1,6 @@
 import { DataSourceOptions } from 'typeorm';
 import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions';
+import { getEnvFile } from '../../libs/env/env-file';
 
 export function getMigrationsDir(nodeEnv = process.env.NODE_ENV): string {
   return nodeEnv === 'local' ? 'local-migrations' : 'migrations';
@@ -27,8 +28,17 @@ function getConnection(): Pick<
   if (process.env.DATABASE_URL) {
     return { url: process.env.DATABASE_URL };
   }
+  if (!process.env.POSTGRES_HOST) {
+    throw new Error(
+      `No database configured for NODE_ENV=${process.env.NODE_ENV ?? '(unset)'}. ` +
+        `Set DATABASE_URL or POSTGRES_HOST — in ${getEnvFile()}, or as real environment ` +
+        `variables if this is a deployed host. Refusing to fall back to a default, because ` +
+        `a "prod" command quietly connecting to localhost is how a local database gets ` +
+        `migrated by mistake.`,
+    );
+  }
   return {
-    host: process.env.POSTGRES_HOST || 'localhost',
+    host: process.env.POSTGRES_HOST,
     port: Number(process.env.POSTGRES_PORT || 5432),
     username: process.env.POSTGRES_USER,
     password: process.env.POSTGRES_PASSWORD,
