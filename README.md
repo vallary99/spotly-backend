@@ -58,7 +58,7 @@ Configuration is per-environment, selected by `NODE_ENV`:
 | `NODE_ENV` | env file | migrations directory |
 |---|---|---|
 | `local` | `.env.local` | `src/database/local-migrations` (gitignored) |
-| `prod` / `production` | `.env.prod` | `src/database/migrations` (committed) |
+| `production` (or `prod`) | `.env.prod` | `src/database/migrations` (committed) |
 | unset | `.env` | `src/database/migrations` |
 
 ```

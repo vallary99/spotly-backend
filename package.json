@@ -26,7 +26,7 @@
     "migration:run": "npm run typeorm:local -- migration:run",
     "migration:revert": "npm run typeorm:local -- migration:revert",
     "migration:show": "npm run typeorm:local -- migration:show",
-    "typeorm:prod": "NODE_ENV=prod ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d ./src/database/config/datasource.ts",
+    "typeorm:prod": "NODE_ENV=production ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d ./src/database/config/datasource.ts",
     "migration:generate:prod": "npm run typeorm:prod -- migration:generate src/database/migrations/Migration",
     "migration:create:prod": "npm run typeorm:prod -- migration:create src/database/migrations/Migration",
     "migration:run:prod": "npm run typeorm:prod -- migration:run",
@@ -34,7 +34,7 @@
     "migration:show:prod": "npm run typeorm:prod -- migration:show",
     "migration:run:deploy": "node ./node_modules/typeorm/cli.js -d dist/database/config/datasource.js migration:run",
     "grant-admin": "NODE_ENV=local ts-node -r tsconfig-paths/register scripts/grant-admin.ts",
-    "grant-admin:prod": "NODE_ENV=prod ts-node -r tsconfig-paths/register scripts/grant-admin.ts"
+    "grant-admin:prod": "NODE_ENV=production ts-node -r tsconfig-paths/register scripts/grant-admin.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
