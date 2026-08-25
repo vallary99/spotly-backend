@@ -1,6 +1,7 @@
 import { DataSourceOptions } from 'typeorm';
 import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions';
 import { getEnvFile } from '../../libs/env/env-file';
+import { ENTITIES } from './entities';
 
 export function getMigrationsDir(nodeEnv = process.env.NODE_ENV): string {
   return nodeEnv === 'local' ? 'local-migrations' : 'migrations';
@@ -15,10 +16,6 @@ export function getMigrationsGlob(nodeEnv = process.env.NODE_ENV): string {
   return isTypeScript()
     ? `src/database/${dir}/*.ts`
     : `dist/database/${dir}/*.js`;
-}
-
-export function getEntitiesGlob(): string {
-  return isTypeScript() ? 'src/**/*.entity.ts' : 'dist/**/*.entity.js';
 }
 
 const URL_VARS = [
@@ -99,7 +96,7 @@ export function buildDataSourceOptions(): DataSourceOptions {
     type: 'postgres',
     ...getConnection(),
     ssl: getSsl(resolveUrl()?.sslRequested ?? false),
-    entities: [getEntitiesGlob()],
+    entities: ENTITIES,
     migrations: [getMigrationsGlob()],
     migrationsTableName: 'migrations',
     synchronize: false,
