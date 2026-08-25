@@ -3,12 +3,15 @@ import { ReviewService } from './review.service';
 import { CreateReviewDto } from './dto/review.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('Reviews')
 @Controller('reviews')
 export class ReviewController {
   constructor(private service: ReviewService) {}
 
   // POST /reviews?businessId=... — auth required (FR-4.3), no @Public().
+  @ApiBearerAuth()
   @Post()
   create(
     @CurrentUser() user: any,

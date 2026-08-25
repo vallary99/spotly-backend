@@ -51,6 +51,24 @@ npm run migration:run
 npm run start:dev
 ```
 
+## API docs
+
+Swagger UI at `/api/docs`, OpenAPI JSON at `/api/docs-json` — 60 documented
+operations across 12 tags.
+
+Both are registered on the express adapter rather than as Nest
+controllers, so the global `JwtAuthGuard` never sees them.
+
+Request and response schemas come from the `@nestjs/swagger` CLI plugin
+(see `nest-cli.json`), which reads the existing `class-validator`
+decorators and TypeScript types — so DTOs stay documented without a
+parallel set of `@ApiProperty` annotations to keep in sync. Route
+summaries come from the JSDoc comments already on the handlers.
+
+Routes marked `@Public()` are shown without a padlock; every other route
+advertises the bearer requirement. Sign in via `POST /auth/login`, then
+paste the token into **Authorize**.
+
 ## Database config and migrations
 
 Configuration is per-environment, selected by `NODE_ENV`:

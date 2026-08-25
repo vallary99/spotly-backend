@@ -1,9 +1,21 @@
-import { Body, Controller, Delete, Param, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Param,
+  Post,
+  Query,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MediaService } from './media.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { MediaType } from './entities/media.entity';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
+@ApiTags('Media')
+@ApiBearerAuth()
 @Controller('businesses/:id/media')
 export class MediaController {
   constructor(private service: MediaService) {}
@@ -44,7 +56,11 @@ export class MediaController {
   }
 
   @Delete(':mediaId')
-  remove(@CurrentUser() user: any, @Param('id') businessId: string, @Param('mediaId') mediaId: string) {
+  remove(
+    @CurrentUser() user: any,
+    @Param('id') businessId: string,
+    @Param('mediaId') mediaId: string,
+  ) {
     return this.service.remove(businessId, mediaId, user.userId);
   }
 }
