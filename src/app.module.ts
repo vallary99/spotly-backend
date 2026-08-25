@@ -27,7 +27,7 @@ import { HealthController } from './health.controller';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [typeormConfig],
-      // NODE_ENV picks the env file: local → .env.local, prod →
+      // NODE_ENV picks the env file: local → .env.local, production →
       // .env.prod, unset → .env. A deployed environment that injects
       // real env vars instead of shipping a file still works — a missing
       // file is a no-op, and real env vars always win over file values.
