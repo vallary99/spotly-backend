@@ -34,7 +34,9 @@
     "migration:show:prod": "npm run typeorm:prod -- migration:show",
     "migration:run:deploy": "node ./node_modules/typeorm/cli.js -d dist/database/config/datasource.js migration:run",
     "grant-admin": "NODE_ENV=local ts-node -r tsconfig-paths/register scripts/grant-admin.ts",
-    "grant-admin:prod": "NODE_ENV=production ts-node -r tsconfig-paths/register scripts/grant-admin.ts"
+    "grant-admin:prod": "NODE_ENV=production ts-node -r tsconfig-paths/register scripts/grant-admin.ts",
+    "seed:admin": "NODE_ENV=local ts-node -r tsconfig-paths/register ./src/database/seeds/admin.seed.ts",
+    "seed:admin:prod": "NODE_ENV=production ts-node -r tsconfig-paths/register ./src/database/seeds/admin.seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
