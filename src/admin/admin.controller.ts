@@ -1,4 +1,14 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, BadRequestException } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  BadRequestException,
+} from '@nestjs/common';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../auth/entities/user.entity';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -6,17 +16,32 @@ import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminBusinessService } from './admin-business.service';
 import { AdminModerationService } from './admin-moderation.service';
 import { AdminEmailService } from './admin-email.service';
-import { AdminBusinessQueryDto, SuspendBusinessDto, SetHiddenGemDto, DiscountCampaignDto, TrialCampaignDto, TransactionQueryDto } from './dto/admin-business.dto';
+import {
+  AdminBusinessQueryDto,
+  SuspendBusinessDto,
+  SetHiddenGemDto,
+  DiscountCampaignDto,
+  TrialCampaignDto,
+  TransactionQueryDto,
+} from './dto/admin-business.dto';
 import { AdminTransactionsService } from './admin-transactions.service';
-import { CreateEmailTemplateDto, UpdateEmailTemplateDto, PreviewEmailDto, SendEmailDto } from './dto/admin-email.dto';
+import {
+  CreateEmailTemplateDto,
+  UpdateEmailTemplateDto,
+  PreviewEmailDto,
+  SendEmailDto,
+} from './dto/admin-email.dto';
 import { TierConfigService } from '../subscription/tier-config.service';
 import { UpdateTierConfigDto } from '../subscription/dto/update-tier-config.dto';
 import { SubscriptionTier } from '../business/entities/business.entity';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 // Platform-operator-only — meant to be called from the separate
 // spotly-admin app, not the consumer app. Gated by the real ADMIN role
 // (see UserRole.ADMIN's comment for how to grant it), enforced by the
 // same RolesGuard already applied globally elsewhere in this codebase.
+@ApiTags('Admin')
+@ApiBearerAuth()
 @Controller('admin')
 @Roles(UserRole.ADMIN)
 export class AdminController {
@@ -36,8 +61,13 @@ export class AdminController {
   }
 
   @Get('analytics/usage')
-  getUsage(@Query('granularity') granularity?: string, @Query('days') days?: string) {
-    const g = (granularity === 'week' || granularity === 'month' ? granularity : 'day') as 'day' | 'week' | 'month';
+  getUsage(
+    @Query('granularity') granularity?: string,
+    @Query('days') days?: string,
+  ) {
+    const g = (
+      granularity === 'week' || granularity === 'month' ? granularity : 'day'
+    ) as 'day' | 'week' | 'month';
     return this.analytics.getUsageSeries(g, days ? parseInt(days, 10) : 30);
   }
 
@@ -69,9 +99,14 @@ export class AdminController {
   }
 
   @Put('tier-configs/:tier')
-  updateTierConfig(@Param('tier') tier: string, @Body() dto: UpdateTierConfigDto) {
+  updateTierConfig(
+    @Param('tier') tier: string,
+    @Body() dto: UpdateTierConfigDto,
+  ) {
     if (!Object.values(SubscriptionTier).includes(tier as SubscriptionTier)) {
-      throw new BadRequestException(`Unknown tier "${tier}". Expected one of: ${Object.values(SubscriptionTier).join(', ')}.`);
+      throw new BadRequestException(
+        `Unknown tier "${tier}". Expected one of: ${Object.values(SubscriptionTier).join(', ')}.`,
+      );
     }
     return this.tierConfig.updateTier(tier as SubscriptionTier, dto);
   }
@@ -96,7 +131,10 @@ export class AdminController {
   }
 
   @Put('moderation-queue/:id/resolve')
-  resolveModerationItem(@Param('id') id: string, @Body('action') action: 'approve' | 'reject') {
+  resolveModerationItem(
+    @Param('id') id: string,
+    @Body('action') action: 'approve' | 'reject',
+  ) {
     return this.moderation.resolve(id, action);
   }
 
@@ -117,7 +155,10 @@ export class AdminController {
   }
 
   @Put('email-templates/:id')
-  updateEmailTemplate(@Param('id') id: string, @Body() dto: UpdateEmailTemplateDto) {
+  updateEmailTemplate(
+    @Param('id') id: string,
+    @Body() dto: UpdateEmailTemplateDto,
+  ) {
     return this.adminEmail.updateTemplate(id, dto);
   }
 
