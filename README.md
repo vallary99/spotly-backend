@@ -59,6 +59,11 @@ operations across 12 tags.
 Both are registered on the express adapter rather than as Nest
 controllers, so the global `JwtAuthGuard` never sees them.
 
+The UI bundle is loaded from a CDN, pinned to the installed
+`swagger-ui-dist` version, rather than served from `node_modules`. Those
+assets are data files, not modules, so a serverless deploy does not
+bundle them — served from disk they 404 and the page renders blank.
+
 Request and response schemas come from the `@nestjs/swagger` CLI plugin
 (see `nest-cli.json`), which reads the existing `class-validator`
 decorators and TypeScript types — so DTOs stay documented without a
