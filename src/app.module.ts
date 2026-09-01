@@ -17,6 +17,7 @@ import { MediaModule } from './media/media.module';
 import { HomeModule } from './home/home.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AdminModule } from './admin/admin.module';
+import { SystemConfigModule } from './config/config.module';
 
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
@@ -53,6 +54,7 @@ import { HealthController } from './health.controller';
     MediaModule,
     HomeModule,
     AdminModule,
+    SystemConfigModule,
   ],
   providers: [
     // NFR-7: JWT auth + role-based guards applied globally; individual

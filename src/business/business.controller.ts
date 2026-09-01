@@ -37,6 +37,16 @@ export class BusinessController {
     return this.service.getCategories();
   }
 
+  // GET /businesses/max-categories — same route-ordering reason as
+  // above. Admin-configurable cap (default 5) the registration/edit
+  // forms size their category picker to; server-side enforcement lives
+  // in BusinessService.create()/update() regardless of what this says.
+  @Public()
+  @Get('max-categories')
+  async getMaxCategories() {
+    return { maxCategories: await this.service.getMaxCategories() };
+  }
+
   // @Public(), but the JWT guard still populates @CurrentUser() when a
   // valid token is present (it only stops short of *requiring* one) —
   // so a logged-in owner viewing their own business still gets

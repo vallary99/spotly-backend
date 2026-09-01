@@ -36,7 +36,10 @@ export class AdminBusinessService {
     const qb = this.businesses.createQueryBuilder('b').leftJoinAndSelect('b.owner', 'owner');
 
     if (filters.city) qb.andWhere('b.city = :city', { city: filters.city });
-    if (filters.category) qb.andWhere('b.category = :category', { category: filters.category });
+    // `categories` is a text[] column (a business can hold up to 5), so
+    // this checks array membership rather than equality — see the same
+    // fix in BusinessService.applyListingFilters.
+    if (filters.category) qb.andWhere(':category = ANY(b.categories)', { category: filters.category });
     if (filters.tier) qb.andWhere('b.tier = :tier', { tier: filters.tier });
     if (filters.isSuspended !== undefined) qb.andWhere('b."isSuspended" = :sus', { sus: filters.isSuspended });
     if (filters.isHiddenGem !== undefined) qb.andWhere('b."isHiddenGem" = :hg', { hg: filters.isHiddenGem });
@@ -59,7 +62,11 @@ export class AdminBusinessService {
       results: results.map((b) => ({
         id: b.id,
         name: b.name,
-        category: b.category,
+        // Kept as a single display string for the admin table (which
+        // still has one "Category" column) even though a business can
+        // now hold up to 5 — joined rather than picking just the first
+        // so nothing is silently hidden from the admin's view.
+        category: (b.categories && b.categories.length > 0) ? b.categories.join(', ') : '',
         city: b.city,
         neighborhood: b.neighborhood,
         tier: b.tier,

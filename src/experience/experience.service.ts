@@ -8,6 +8,7 @@ import { randomUUID } from 'crypto';
 import { TierConfigService } from '../subscription/tier-config.service';
 import { QualityGateService } from '../media/quality-gate.service';
 import { StorageService } from '../media/storage.service';
+import { withBudgetFallback } from './experience.util';
 
 @Injectable()
 export class ExperienceService {
@@ -97,10 +98,17 @@ export class ExperienceService {
   }
 
   async findAll(params: { upcoming?: boolean }) {
-    const qb = this.experiences.createQueryBuilder('e').where('e.isExpired = false');
+    const qb = this.experiences.createQueryBuilder('e').leftJoinAndSelect('e.business', 'business').where('e.isExpired = false');
     if (params.upcoming) qb.andWhere('e.startsAt > NOW()');
     qb.orderBy('e.startsAt', 'ASC').take(50);
-    return qb.getMany();
+    const rows = await qb.getMany();
+    // Same public-endpoint field-stripping as HomeService's rail —
+    // the joined `business` only exists here to resolve the budget
+    // fallback, never to leak owner-only fields onto a public list.
+    return rows.map((e) => {
+      const { business, ...rest } = e as any;
+      return withBudgetFallback(rest, business);
+    });
   }
 
   async update(id: string, ownerId: string, dto: UpdateExperienceDto) {

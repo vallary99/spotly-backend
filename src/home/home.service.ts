@@ -3,13 +3,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Business, SubscriptionTier } from '../business/entities/business.entity';
 import { Experience } from '../experience/entities/experience.entity';
+import { QuickFilterGroup } from '../business/entities/quick-filter-group.entity';
 import { BusinessService } from '../business/business.service';
+import { withBudgetFallback } from '../experience/experience.util';
 
 @Injectable()
 export class HomeService {
   constructor(
     @InjectRepository(Business) private businesses: Repository<Business>,
     @InjectRepository(Experience) private experiences: Repository<Experience>,
+    @InjectRepository(QuickFilterGroup) private quickFilterGroups: Repository<QuickFilterGroup>,
     private businessService: BusinessService,
   ) {}
 
@@ -59,7 +62,7 @@ export class HomeService {
     // ownerId) on a public, unauthenticated endpoint.
     const upcoming = upcomingRaw.map((e) => {
       const { business, ...rest } = e;
-      return { ...rest, businessName: business?.name };
+      return { ...withBudgetFallback(rest, business), businessName: business?.name };
     });
 
     // Same treatment as GET /businesses: attach real rating aggregates,
@@ -108,9 +111,28 @@ export class HomeService {
 
     const heroSource = [...organicHero, ...featuredPicks, ...fillerHero].map((b) => ({ id: b.id, name: b.name }));
 
+    // Load quick filter groups from database (admin-configurable)
+    const quickFilters = await this.quickFilterGroups.find({
+      relations: ['categories'],
+      order: { sortOrder: 'ASC' },
+    });
+
     return {
       hero: { featured: heroSource },
-      quickFilters: ['Nearby', 'Trending', 'Open Now', 'Restaurants', 'Coffee'],
+      quickFilters: quickFilters.map((group) => ({
+        id: group.id,
+        label: group.label,
+        icon: group.icon,
+        // Category names, not just a count — the frontend needs these
+        // to actually build the `?categories=` filter query when a chip
+        // is clicked (see BusinessService.applyListingFilters' `&&`
+        // overlap match). Previously only categoryCount was returned,
+        // which meant the frontend still had to keep its own hardcoded
+        // copy of every group's category list to make filtering work at
+        // all — admin edits to a group's mapping never actually reached
+        // the live homepage.
+        categories: (group.categories || []).map((c) => c.name),
+      })),
       rails: {
         trendingThisWeek: trending,
         popularNearYou: popular,

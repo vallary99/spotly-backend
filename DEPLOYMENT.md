@@ -62,9 +62,10 @@ fly deploy
 ## Before you go live for real (not just testing)
 
 - **Run the migrations.** `synchronize` is off everywhere, so the
-  schema comes entirely from `src/database/migrations/` (the committed,
-  reviewed set — separate from the gitignored `local-migrations/` used
-  for day-to-day development). The included `render.yaml` runs them via
+  schema comes entirely from `src/database/migrations/` — the same
+  committed set that local development runs too (local and prod only
+  differ in which database they connect to, not which migration files
+  they apply). The included `render.yaml` runs them via
   `preDeployCommand: npm run migration:run:deploy` before each new build
   takes traffic. On any other host, run that same command as a deploy
   step — it uses plain `node` against the compiled migrations in

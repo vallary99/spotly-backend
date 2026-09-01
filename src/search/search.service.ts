@@ -7,10 +7,11 @@ import { Experience } from '../experience/entities/experience.entity';
 // The tsvector expression here has to stay in sync with the one in
 // migration AddBusinessSearchIndex — same weighting, same columns —
 // otherwise Postgres can't use the GIN index for this query and falls
-// back to a full table scan.
+// back to a full table scan. Updated to support categories array by
+// converting it to text with array_to_string().
 const SEARCH_VECTOR_SQL = `(
   setweight(to_tsvector('english', coalesce(b.name, '')), 'A') ||
-  setweight(to_tsvector('english', coalesce(b.category, '')), 'B') ||
+  setweight(to_tsvector('english', coalesce(array_to_string(b.categories, ' '), '')), 'B') ||
   setweight(to_tsvector('english', coalesce(b.description, '')), 'C')
 )`;
 
@@ -64,7 +65,7 @@ export class SearchService {
         .getMany(),
     ]);
     return {
-      businesses: businesses.map((b) => ({ id: b.id, name: b.name, category: b.category })),
+      businesses: businesses.map((b) => ({ id: b.id, name: b.name, categories: b.categories })),
       experiences: experiences.map((e) => ({ id: e.id, title: e.title, startsAt: e.startsAt })),
     };
   }

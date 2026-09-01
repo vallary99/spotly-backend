@@ -47,6 +47,12 @@ export class Experience {
   @Column({ type: 'float', nullable: true })
   price: number;
 
+  @Column({ type: 'float', nullable: true })
+  budgetMin: number; // Optional minimum budget for this experience
+
+  @Column({ type: 'float', nullable: true })
+  budgetMax: number; // Optional maximum budget for this experience
+
   // Replaces the old `category` field — category never had any actual
   // use (no experience filtering by it existed anywhere in the
   // frontend), whereas a ticketing link is something real events

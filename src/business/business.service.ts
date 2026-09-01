@@ -1,7 +1,8 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Business } from './entities/business.entity';
+import { Business, SubscriptionTier } from './entities/business.entity';
+import { Category } from './entities/category.entity';
 import { Experience } from '../experience/entities/experience.entity';
 import { User, UserRole } from '../auth/entities/user.entity';
 import { UsageEvent } from '../tasks/entities/usage-event.entity';
@@ -9,6 +10,16 @@ import { Media, MediaStatus, MediaType } from '../media/entities/media.entity';
 import { CreateBusinessDto, UpdateBusinessDto, SetCoverPhotoDto } from './dto/business.dto';
 import { UsageService } from '../tasks/usage.service';
 import { EmailService } from '../email/email.service';
+import { SystemConfigService } from '../config/system-config.service';
+import { withBudgetFallback } from '../experience/experience.util';
+
+// Val, Sep 2026: the first 100 businesses ever registered are
+// auto-enrolled in a Premium trial offer (not silently upgraded — they
+// still have to click "Start Trial" themselves, same as any
+// admin-granted offer, see SubscriptionService.startTrial). This is the
+// count checked at registration time in create() below.
+const FIRST_COHORT_SIZE = 100;
+const FIRST_COHORT_TRIAL_DAYS = 30;
 
 // Seed categories shown even before any business has picked them —
 // keeps the registration dropdown useful on day one. Real categories
@@ -120,27 +131,33 @@ const SEED_CATEGORIES = [
 export class BusinessService {
   constructor(
     @InjectRepository(Business) private businesses: Repository<Business>,
+    @InjectRepository(Category) private categories: Repository<Category>,
     @InjectRepository(User) private users: Repository<User>,
     @InjectRepository(Experience) private experiences: Repository<Experience>,
     @InjectRepository(UsageEvent) private usageEvents: Repository<UsageEvent>,
     @InjectRepository(Media) private media: Repository<Media>,
     private usage: UsageService,
     private email: EmailService,
+    private systemConfig: SystemConfigService,
   ) {}
 
-  // GET /businesses/categories — powers the registration form's dropdown
-  // AND doubles as evidence a category is "real": once one business
-  // registers under a custom "Other" category (e.g. "Bowling"), it
-  // appears here for every subsequent business, so they don't have to
-  // rediscover "Other" independently — this is what closes that loop.
+  // GET /businesses/max-categories — the registration/edit forms' cap,
+  // admin-configurable (Val, Sep 2026: "cap at 5 for now but make it
+  // configurable"). Server-side enforcement lives in create()/update()
+  // below; this is just what the UI sizes its picker to.
+  async getMaxCategories(): Promise<number> {
+    return this.systemConfig.getMaxCategoriesPerBusiness();
+  }
+
+  // GET /businesses/categories — powers the registration form's dropdown.
+  // Now fetches from the Category table (admin-managed) instead of hardcoded
+  // SEED_CATEGORIES.
   async getCategories(): Promise<string[]> {
-    const rows: Array<{ category: string }> = await this.businesses
-      .createQueryBuilder('b')
-      .select('DISTINCT b.category', 'category')
-      .getRawMany();
-    const inUse = rows.map((r) => r.category).filter(Boolean);
-    const merged = Array.from(new Set([...SEED_CATEGORIES, ...inUse]));
-    return merged.sort((a, b) => a.localeCompare(b));
+    const rows = await this.categories.find({
+      select: ['name'],
+      order: { name: 'ASC' },
+    });
+    return rows.map((r) => r.name);
   }
 
   // POST /businesses — FR-7.1/7.2/7.3: begins onboarding with Venue or
@@ -150,7 +167,34 @@ export class BusinessService {
     if (existing) {
       throw new ConflictException('This account already has a registered business.');
     }
-    const business = await this.businesses.save(this.businesses.create({ ...dto, ownerId: userId }));
+    const maxCategories = await this.getMaxCategories();
+    if (dto.categories && dto.categories.length > maxCategories) {
+      throw new BadRequestException(`A business can have at most ${maxCategories} categories.`);
+    }
+
+    // First-100 cohort: BEFORE inserting this business, so the count
+    // reflects businesses that existed prior to it (the 1st business
+    // registered sees a count of 0 and qualifies, the 101st sees 100
+    // and doesn't). Grants ELIGIBILITY only — trialOfferTier/Days is
+    // the same two-step mechanism an admin-granted trial uses, the
+    // owner still has to hit "Start Trial" for the clock to start (see
+    // SubscriptionService.startTrial).
+    const existingCount = await this.businesses.count();
+    const isFirstCohort = existingCount < FIRST_COHORT_SIZE;
+
+    const business = await this.businesses.save(
+      this.businesses.create({
+        ...dto,
+        ownerId: userId,
+        ...(isFirstCohort
+          ? {
+              firstCohortPremiumTrial: true,
+              trialOfferTier: SubscriptionTier.PREMIUM,
+              trialOfferDays: FIRST_COHORT_TRIAL_DAYS,
+            }
+          : {}),
+      }),
+    );
     await this.users.update(userId, { role: UserRole.BUSINESS_OWNER });
     const owner = await this.users.findOne({ where: { id: userId } });
     if (owner) {
@@ -228,10 +272,11 @@ export class BusinessService {
     if (!business) {
       throw new NotFoundException('Business not found.');
     }
-    return this.experiences.find({
+    const rows = await this.experiences.find({
       where: { businessId: id },
       order: { startsAt: 'DESC' },
     });
+    return rows.map((e) => withBudgetFallback(e, business));
   }
 
   // PUT /businesses/:id — only the owning Business Account may edit its
@@ -243,6 +288,12 @@ export class BusinessService {
     }
     if (business.ownerId !== userId) {
       throw new ForbiddenException('You do not own this business.');
+    }
+    if (dto.categories) {
+      const maxCategories = await this.getMaxCategories();
+      if (dto.categories.length > maxCategories) {
+        throw new BadRequestException(`A business can have at most ${maxCategories} categories.`);
+      }
     }
     Object.assign(business, dto);
     return this.businesses.save(business);
@@ -331,13 +382,18 @@ export class BusinessService {
     );
     if (params.city) qb.andWhere('b.city = :city', { city: params.city });
     if (params.neighborhood) qb.andWhere('b.neighborhood = :n', { n: params.neighborhood });
-    if (params.category) qb.andWhere('b.category = :c', { c: params.category });
+    // `categories` is a text[] column now (a business can hold up to 5),
+    // so a single-category filter checks array membership rather than
+    // equality, and a multi-category filter (comma-separated, matching
+    // ANY of them — used by thematic quick filters like "Nightlife")
+    // checks for array overlap via the && operator.
+    if (params.category) qb.andWhere(':c = ANY(b.categories)', { c: params.category });
     if (params.categories) {
       const list = params.categories
         .split(',')
         .map((c) => c.trim())
         .filter(Boolean);
-      if (list.length > 0) qb.andWhere('b.category IN (:...cats)', { cats: list });
+      if (list.length > 0) qb.andWhere('b.categories && :cats', { cats: list });
     }
     // Combines with any other filter (category, city, etc.) rather than
     // replacing it — this is what lets "Hidden Gems" be toggled on
@@ -345,7 +401,10 @@ export class BusinessService {
     // the same time, per "can be used concurrently."
     if (params.isHiddenGem) qb.andWhere('b."isHiddenGem" = true');
     if (params.q) {
-      qb.andWhere('(b.name ILIKE :q OR b.category ILIKE :q)', { q: `%${params.q}%` });
+      qb.andWhere(
+        `(b.name ILIKE :q OR EXISTS (SELECT 1 FROM unnest(b.categories) cat WHERE cat ILIKE :q))`,
+        { q: `%${params.q}%` },
+      );
     }
     return qb;
   }

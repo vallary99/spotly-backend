@@ -1,8 +1,19 @@
 import { DataSourceOptions } from 'typeorm';
 import { PostgresConnectionOptions } from 'typeorm/driver/postgres/PostgresConnectionOptions';
 
-export function getMigrationsDir(nodeEnv = process.env.NODE_ENV): string {
-  return nodeEnv === 'local' ? 'local-migrations' : 'migrations';
+// Both `local` and `prod` read from the SAME migrations folder now —
+// only which database they connect to differs (via .env.local vs
+// .env.prod, see getConnection() below). This used to branch to a
+// separate `local-migrations` folder that was permanently empty, which
+// meant `npm run migration:run` (no suffix) silently did nothing while
+// `npm run migration:run:prod` was the only command that actually ran
+// anything — a real incident (Sep 2026): a person trying to fix their
+// LOCAL database's stale schema was told to run `:prod`, which is the
+// only thing that would have worked, but which also means any local-fix
+// instructions in that shape run against production by construction.
+// One folder removes that trap entirely.
+export function getMigrationsDir(_nodeEnv = process.env.NODE_ENV): string {
+  return 'migrations';
 }
 
 function isTypeScript(): boolean {

@@ -99,21 +99,21 @@ runs fully without them; payments and OAuth operate in a clearly-labeled
 simulated mode, and media uploads are written to `./uploads` and served
 from `/uploads/`.
 
-Create the schema. Your local migrations live in
-`src/database/local-migrations/`, which is gitignored and starts empty —
-so on a fresh database you generate the initial one from the entities,
-then run it:
+Create the schema. All migrations — local and production — live in the
+one committed folder, `src/database/migrations/`, so a fresh local
+database just applies everything that's already there:
 
 ```bash
-npm run migration:generate   # first time only
 npm run migration:run
 ```
 
-From then on it's `migration:generate` after an entity change,
-`migration:run` to apply, `migration:revert` to undo. When a schema
-change is ready to ship, generate it once more against production
-(`npm run migration:generate:prod`) — that writes the reviewed,
-committed copy into `src/database/migrations/`.
+From then on, if you're changing the schema yourself: `migration:generate`
+after an entity change, `migration:run` to apply it, `migration:revert`
+to undo it before it's committed if it's wrong. `local` and `prod` run
+against the same migration files, so there's no separate "promote to
+prod" step — the only thing `:prod`-suffixed commands change is which
+database they connect to (`.env.prod` instead of `.env.local`), so
+double-check you mean to run against the real database before using one.
 
 Start the backend:
 

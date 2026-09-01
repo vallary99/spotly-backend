@@ -28,6 +28,22 @@ export class PaymentService {
       throw new NotFoundException('Business not found.');
     }
 
+    // Payments are blocked ONLY while a trial is actively running — not
+    // globally, and not gated by which cohort granted the trial (Val,
+    // Sep 2026: "only when on active trial"). A trialing business is
+    // already getting that tier's features for free; once the trial
+    // ends (or they haven't started one yet), payment works normally.
+    if (business.isTrialing) {
+      throw new ForbiddenException(
+        'Payments aren\'t available while your free trial is active. This opens up automatically once your trial ends.',
+      );
+    }
+    if (business.isTrialing && !business.firstCohortPremiumTrial) {
+      throw new ForbiddenException(
+        'Payment not allowed during trial period. Complete your trial to unlock premium features.',
+      );
+    }
+
     // Reject an unusable phone number here, with a clear message, rather
     // than letting it reach Daraja and come back as an opaque rejected
     // axios call (see DarajaService) — this is the common case (a typo

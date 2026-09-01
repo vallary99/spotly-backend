@@ -12,6 +12,9 @@ import { CreateEmailTemplateDto, UpdateEmailTemplateDto, PreviewEmailDto, SendEm
 import { TierConfigService } from '../subscription/tier-config.service';
 import { UpdateTierConfigDto } from '../subscription/dto/update-tier-config.dto';
 import { SubscriptionTier } from '../business/entities/business.entity';
+import { AdminConfigService } from './admin-config.service';
+import { CreateCategoryDto, UpdateCategoryDto, CreateNeighborhoodDto, UpdateNeighborhoodDto, CreateQuickFilterGroupDto, UpdateQuickFilterGroupDto, MapCategoriesToGroupDto } from './dto/config.dto';
+import { SystemConfigService } from '../config/system-config.service';
 
 // Platform-operator-only — meant to be called from the separate
 // spotly-admin app, not the consumer app. Gated by the real ADMIN role
@@ -27,6 +30,8 @@ export class AdminController {
     private adminEmail: AdminEmailService,
     private transactions: AdminTransactionsService,
     private tierConfig: TierConfigService,
+    private config: AdminConfigService,
+    private systemConfig: SystemConfigService,
   ) {}
 
   // --- Dashboard ---
@@ -151,5 +156,93 @@ export class AdminController {
   @Get('transactions')
   listTransactions(@Query() query: TransactionQueryDto) {
     return this.transactions.findAll(query);
+  }
+
+  // --- Configuration: Categories ---
+  @Get('categories')
+  listCategories() {
+    return this.config.findAllCategories();
+  }
+
+  @Post('categories')
+  createCategory(@Body() dto: CreateCategoryDto) {
+    return this.config.createCategory(dto);
+  }
+
+  @Put('categories/:id')
+  updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.config.updateCategory(id, dto);
+  }
+
+  @Delete('categories/:id')
+  deleteCategory(@Param('id') id: string) {
+    return this.config.deleteCategory(id);
+  }
+
+  // --- Configuration: Neighborhoods ---
+  @Get('neighborhoods')
+  listNeighborhoods() {
+    return this.config.findAllNeighborhoods();
+  }
+
+  @Post('neighborhoods')
+  createNeighborhood(@Body() dto: CreateNeighborhoodDto) {
+    return this.config.createNeighborhood(dto);
+  }
+
+  @Put('neighborhoods/:id')
+  updateNeighborhood(@Param('id') id: string, @Body() dto: UpdateNeighborhoodDto) {
+    return this.config.updateNeighborhood(id, dto);
+  }
+
+  @Delete('neighborhoods/:id')
+  deleteNeighborhood(@Param('id') id: string) {
+    return this.config.deleteNeighborhood(id);
+  }
+
+  // --- Configuration: Quick Filter Groups ---
+  @Get('quick-filter-groups')
+  listFilterGroups() {
+    return this.config.findAllFilterGroups();
+  }
+
+  @Get('quick-filter-groups/:id')
+  getFilterGroup(@Param('id') id: string) {
+    return this.config.findFilterGroupById(id);
+  }
+
+  @Post('quick-filter-groups')
+  createFilterGroup(@Body() dto: CreateQuickFilterGroupDto) {
+    return this.config.createFilterGroup(dto);
+  }
+
+  @Put('quick-filter-groups/:id')
+  updateFilterGroup(@Param('id') id: string, @Body() dto: UpdateQuickFilterGroupDto) {
+    return this.config.updateFilterGroup(id, dto);
+  }
+
+  @Delete('quick-filter-groups/:id')
+  deleteFilterGroup(@Param('id') id: string) {
+    return this.config.deleteFilterGroup(id);
+  }
+
+  @Put('quick-filter-groups/:id/categories')
+  mapCategoriesToGroup(@Param('id') id: string, @Body() dto: MapCategoriesToGroupDto) {
+    return this.config.mapCategoriesToGroup(id, dto);
+  }
+
+  // --- Configuration: platform-wide settings ---
+  @Get('settings/max-categories')
+  async getMaxCategoriesSetting() {
+    return { maxCategories: await this.systemConfig.getMaxCategoriesPerBusiness() };
+  }
+
+  @Put('settings/max-categories')
+  async setMaxCategoriesSetting(@Body('maxCategories') maxCategories: number) {
+    if (typeof maxCategories !== 'number' || !Number.isFinite(maxCategories)) {
+      throw new BadRequestException('maxCategories must be a number.');
+    }
+    const saved = await this.systemConfig.setMaxCategoriesPerBusiness(maxCategories);
+    return { maxCategories: saved };
   }
 }

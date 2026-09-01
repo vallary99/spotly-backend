@@ -29,6 +29,16 @@ export class CreateExperienceDto {
   @Min(0)
   price: number;
 
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  budgetMin?: number; // Optional minimum budget for the experience
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  budgetMax?: number; // Optional maximum budget for the experience
+
   // The one deliberately optional field — a free walk-in event
   // genuinely has nothing to put here. Every other field stays
   // mandatory: a business owner is expected to submit a complete
@@ -52,5 +62,12 @@ export class UpdateExperienceDto {
   @IsOptional() @IsDateString() endsAt?: string;
   @IsOptional() @IsString() location?: string;
   @IsOptional() @IsNumber() @Min(0) price?: number;
+  // number|null (not just number|undefined) so the dashboard's
+  // "use business default" toggle can explicitly CLEAR a previously-set
+  // custom budget back to inheriting the business's — omitting the key
+  // entirely (undefined) would leave whatever was there untouched
+  // instead, since this DTO is merged via Object.assign in the service.
+  @IsOptional() @IsNumber() @Min(0) budgetMin?: number | null;
+  @IsOptional() @IsNumber() @Min(0) budgetMax?: number | null;
   @IsOptional() @IsString() ticketingLink?: string;
 }

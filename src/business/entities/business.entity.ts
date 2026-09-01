@@ -34,6 +34,12 @@ export enum SubscriptionStatus {
   DOWNGRADED = 'DOWNGRADED',
 }
 
+export enum ReservationPolicy {
+  RESERVATION_ONLY = 'RESERVATION_ONLY',
+  WALK_IN_ONLY = 'WALK_IN_ONLY',
+  BOTH = 'BOTH',
+}
+
 @Entity('businesses')
 export class Business {
   @PrimaryGeneratedColumn('uuid')
@@ -52,15 +58,28 @@ export class Business {
   @Column()
   name: string;
 
-  @Index()
-  @Column()
-  category: string;
+  // Multiple categories (max 5 configurable by admin)
+  @Column({ type: 'text', array: true, default: [] })
+  categories: string[]; // Replaces old single 'category' column
+
+  @Column({ type: 'float', nullable: true })
+  budgetMin: number; // Optional minimum budget
+
+  @Column({ type: 'float', nullable: true })
+  budgetMax: number; // Optional maximum budget
+
+  @Column({ type: 'enum', enum: ReservationPolicy, nullable: true })
+  reservationPolicy: ReservationPolicy; // RESERVATION_ONLY | WALK_IN_ONLY | BOTH
 
   @Column({ nullable: true, type: 'text' })
   description: string;
 
+  // Separate phone numbers for calls and WhatsApp
   @Column({ nullable: true })
-  phone: string;
+  callPhone: string; // For phone calls
+
+  @Column({ nullable: true })
+  whatsappPhone: string; // For WhatsApp (opens web or app)
 
   @Column({ nullable: true })
   email: string;
@@ -107,6 +126,11 @@ export class Business {
 
   @Column({ default: false })
   isGrandfathered: boolean; // one of the first 200 free-cohort businesses
+
+  // One of the first 100 businesses, auto-enrolled in premium trial
+  // but must still explicitly opt-in (activate the offer)
+  @Column({ default: false })
+  firstCohortPremiumTrial: boolean;
 
   // Admin-set via the reward program (see AdminController's
   // businesses/discount endpoint) — a plain percentage (0-100) applied

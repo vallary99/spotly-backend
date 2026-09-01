@@ -53,6 +53,11 @@ export class SubscriptionService {
       status: business.subscriptionStatus,
       isGrandfathered: business.isGrandfathered,
       discountPercent: business.discountPercent,
+      // Surfaced so the dashboard can hide the manual pay-for-a-tier
+      // picker while a first-cohort trial offer is still pending
+      // activation (Val, Sep 2026: "disabling the other tiers") — they
+      // should activate the free trial, not pay to skip it.
+      firstCohortPremiumTrial: business.firstCohortPremiumTrial,
       // Trial offer — present only when an admin has granted eligibility
       // but the owner hasn't activated it yet ("Try Premium for free").
       trialOffer:

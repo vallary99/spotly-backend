@@ -46,8 +46,7 @@ Point `.env.local` at it (either `DATABASE_URL`, or the `POSTGRES_*`
 parts), then create the schema and start:
 
 ```bash
-npm run migration:generate   # first time only, on an empty database
-npm run migration:run
+npm run migration:run   # applies every committed migration in src/database/migrations
 npm run start:dev
 ```
 
@@ -57,8 +56,8 @@ Configuration is per-environment, selected by `NODE_ENV`:
 
 | `NODE_ENV` | env file | migrations directory |
 |---|---|---|
-| `local` | `.env.local` | `src/database/local-migrations` (gitignored) |
-| `prod` / `production` | `.env.prod` | `src/database/migrations` (committed) |
+| `local` | `.env.local` | `src/database/migrations` |
+| `prod` / `production` | `.env.prod` | `src/database/migrations` |
 | unset | `.env` | `src/database/migrations` |
 
 ```
@@ -79,12 +78,21 @@ convention (`src/**/*.entity.ts`, or `dist/**/*.entity.js` for the
 compiled build), so adding an entity means creating the file: there's no
 registry to update and forget.
 
-**Two migration directories, on purpose.** Local schema work is
-iterative — generate, run, revert, regenerate — and that churn has no
-business in the history that will one day run against real user data.
-So `local-migrations/` is gitignored scratch space, and when a change is
-settled you generate it once more against `prod` to produce the
-committed migration in `migrations/`.
+**One migration directory, not two.** This used to be two directories —
+a gitignored `local-migrations/` for iterative local schema work, and
+the committed `migrations/` for the real history — on the idea that
+local churn shouldn't pollute what eventually runs against real user
+data. In practice `local-migrations/` being gitignored meant it started
+empty on every fresh checkout, and `npm run migration:run` (no suffix)
+would silently do nothing there with zero error output — a real
+incident (Sep 2026) where a stale-schema error on a fresh checkout
+looked like a code bug but was actually this. `local` and `prod` now
+run the exact same committed migration files; the only difference
+between them is which database they connect to. If you want to
+experiment with schema changes locally before committing them, generate
+the migration, `migration:run` it, and if it's wrong, `migration:revert`
+and delete the file — same as working with any other file you haven't
+committed yet.
 
 | Local (`.env.local`) | Production (`.env.prod`) |
 |---|---|

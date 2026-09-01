@@ -1,5 +1,28 @@
 import { IsEnum, IsOptional, IsString, IsArray, IsNumber, IsObject, IsBoolean } from 'class-validator';
-import { BusinessType } from '../entities/business.entity';
+import { BusinessType, ReservationPolicy } from '../entities/business.entity';
+
+// Custom validator to limit array size
+function MaxArrayLength(max: number) {
+  return function (target: any, propertyKey: string) {
+    let value: any;
+    const getter = function () {
+      return value;
+    };
+    const setter = function (newVal: any) {
+      if (Array.isArray(newVal) && newVal.length > max) {
+        throw new Error(`${propertyKey} cannot have more than ${max} items`);
+      }
+      value = newVal;
+    };
+
+    Object.defineProperty(target, propertyKey, {
+      get: getter,
+      set: setter,
+      enumerable: true,
+      configurable: true,
+    });
+  };
+}
 
 export class CreateBusinessDto {
   @IsEnum(BusinessType)
@@ -8,8 +31,9 @@ export class CreateBusinessDto {
   @IsString()
   name: string;
 
-  @IsString()
-  category: string;
+  @IsArray()
+  @IsString({ each: true })
+  categories: string[]; // Multiple categories (max 5)
 
   @IsOptional()
   @IsString()
@@ -17,7 +41,11 @@ export class CreateBusinessDto {
 
   @IsOptional()
   @IsString()
-  phone?: string;
+  callPhone?: string; // For phone calls
+
+  @IsOptional()
+  @IsString()
+  whatsappPhone?: string; // For WhatsApp
 
   @IsOptional()
   @IsString()
@@ -27,9 +55,6 @@ export class CreateBusinessDto {
   @IsString()
   address?: string;
 
-  // Not @IsUrl() strictly — owners may type "mybusiness.com" without a
-  // scheme; the frontend normalizes it to a full https:// link when
-  // rendering, rather than rejecting valid-but-schemeless input here.
   @IsOptional()
   @IsString()
   website?: string;
@@ -59,6 +84,18 @@ export class CreateBusinessDto {
   neighborhood?: string;
 
   @IsOptional()
+  @IsNumber()
+  budgetMin?: number; // Optional minimum budget
+
+  @IsOptional()
+  @IsNumber()
+  budgetMax?: number; // Optional maximum budget
+
+  @IsOptional()
+  @IsEnum(ReservationPolicy)
+  reservationPolicy?: ReservationPolicy; // RESERVATION_ONLY | WALK_IN_ONLY | BOTH
+
+  @IsOptional()
   @IsBoolean()
   isHiddenGem?: boolean;
 }
@@ -69,8 +106,9 @@ export class UpdateBusinessDto {
   name?: string;
 
   @IsOptional()
-  @IsString()
-  category?: string;
+  @IsArray()
+  @IsString({ each: true })
+  categories?: string[]; // Multiple categories (max 5)
 
   @IsOptional()
   @IsString()
@@ -78,7 +116,11 @@ export class UpdateBusinessDto {
 
   @IsOptional()
   @IsString()
-  phone?: string;
+  callPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  whatsappPhone?: string;
 
   @IsOptional()
   @IsString()
@@ -107,6 +149,18 @@ export class UpdateBusinessDto {
   @IsOptional()
   @IsString()
   neighborhood?: string;
+
+  @IsOptional()
+  @IsNumber()
+  budgetMin?: number;
+
+  @IsOptional()
+  @IsNumber()
+  budgetMax?: number;
+
+  @IsOptional()
+  @IsEnum(ReservationPolicy)
+  reservationPolicy?: ReservationPolicy;
 
   @IsOptional()
   @IsBoolean()
