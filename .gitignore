@@ -4,6 +4,9 @@ dist/
 *.log
 uploads/
 
+# IDE / editor
+.idea/
+
 # Env files — one per environment, selected by NODE_ENV
 # (see src/libs/env/env-file.ts). Never commit real credentials;
 # .env.example is the committed template.

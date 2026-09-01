@@ -50,14 +50,37 @@ npm run migration:run   # applies every committed migration in src/database/migr
 npm run start:dev
 ```
 
+## API docs
+
+Swagger UI at `/api/docs`, OpenAPI JSON at `/api/docs-json` — 60 documented
+operations across 12 tags.
+
+Both are registered on the express adapter rather than as Nest
+controllers, so the global `JwtAuthGuard` never sees them.
+
+The UI bundle is loaded from a CDN, pinned to the installed
+`swagger-ui-dist` version, rather than served from `node_modules`. Those
+assets are data files, not modules, so a serverless deploy does not
+bundle them — served from disk they 404 and the page renders blank.
+
+Request and response schemas come from the `@nestjs/swagger` CLI plugin
+(see `nest-cli.json`), which reads the existing `class-validator`
+decorators and TypeScript types — so DTOs stay documented without a
+parallel set of `@ApiProperty` annotations to keep in sync. Route
+summaries come from the JSDoc comments already on the handlers.
+
+Routes marked `@Public()` are shown without a padlock; every other route
+advertises the bearer requirement. Sign in via `POST /auth/login`, then
+paste the token into **Authorize**.
+
 ## Database config and migrations
 
 Configuration is per-environment, selected by `NODE_ENV`:
 
 | `NODE_ENV` | env file | migrations directory |
 |---|---|---|
-| `local` | `.env.local` | `src/database/migrations` |
-| `prod` / `production` | `.env.prod` | `src/database/migrations` |
+| `local` | `.env.local` | `src/database/local-migrations` (gitignored) |
+| `production` (or `prod`) | `.env.prod` | `src/database/migrations` (committed) |
 | unset | `.env` | `src/database/migrations` |
 
 ```
