@@ -47,6 +47,15 @@ export class BusinessController {
     return { maxCategories: await this.service.getMaxCategories() };
   }
 
+  // GET /businesses/geocode — same route-ordering reason as above.
+  // Public: anyone filling out the onboarding form is, by definition,
+  // not authenticated yet at that point in the flow.
+  @Public()
+  @Get('geocode')
+  async geocode(@Query('q') query: string) {
+    return this.service.geocodeAddress(query || '');
+  }
+
   // @Public(), but the JWT guard still populates @CurrentUser() when a
   // valid token is present (it only stops short of *requiring* one) —
   // so a logged-in owner viewing their own business still gets

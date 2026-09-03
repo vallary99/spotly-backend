@@ -149,6 +149,46 @@ export class BusinessService {
     return this.systemConfig.getMaxCategoriesPerBusiness();
   }
 
+  // GET /businesses/geocode — proxies to OpenStreetMap's free Nominatim
+  // service, run from the SERVER rather than called directly from the
+  // browser (Val, Sep 2026: geocoding silently did nothing for some
+  // addresses). Browsers can't set a custom User-Agent on fetch() —
+  // it's a forbidden header, not something client code can work around
+  // — and Nominatim's usage policy asks every request to identify
+  // itself that way; an unidentified browser request is liable to get
+  // silently blocked. A Node server has no such restriction, so this
+  // one call site can comply properly and every business's geocode
+  // request benefits, not just whichever browser happens to send a
+  // header correctly.
+  async geocodeAddress(query: string): Promise<{ latitude: number; longitude: number; displayName: string } | null> {
+    const trimmed = query.trim();
+    if (!trimmed) return null;
+    const params = new URLSearchParams({
+      q: `${trimmed}, Nairobi, Kenya`,
+      format: 'json',
+      limit: '1',
+    });
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+        headers: {
+          // Identifies the app per Nominatim's usage policy — replace
+          // the contact address if this ever changes.
+          'User-Agent': 'Spotly/1.0 (hello@spotly.co.ke)',
+        },
+      });
+      if (!res.ok) return null;
+      const results = (await res.json()) as Array<{ lat: string; lon: string; display_name: string }>;
+      if (results.length === 0) return null;
+      return {
+        latitude: parseFloat(results[0].lat),
+        longitude: parseFloat(results[0].lon),
+        displayName: results[0].display_name,
+      };
+    } catch {
+      return null;
+    }
+  }
+
   // GET /businesses/categories — powers the registration form's dropdown.
   // Now fetches from the Category table (admin-managed) instead of hardcoded
   // SEED_CATEGORIES.

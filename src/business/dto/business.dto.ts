@@ -135,6 +135,14 @@ export class UpdateBusinessDto {
   website?: string;
 
   @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
+  @IsOptional()
   @IsObject()
   hours?: Record<string, { open: string; close: string } | null>;
 
