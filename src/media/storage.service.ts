@@ -4,6 +4,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { randomUUID } from 'crypto';
+import { MediaType } from './entities/media.entity';
 
 // Two possible backends, resolved by resolveProvider() below: local disk
 // (dev default, nothing configured) or Cloudinary. Every method branches
@@ -82,14 +83,28 @@ export class StorageService {
   }
 
   // Reserves the key the file will live at and hands back the URL it'll
-  // be served from. The frontend doesn't upload directly to storage — it
-  // POSTs bytes to the backend (see media.controller.ts) so the quality
-  // gate can inspect them before anything is persisted — so `uploadUrl`
-  // is informational here rather than a signed direct-upload target.
-  // Cloudinary has no bare presigned-PUT equivalent anyway; its
-  // direct-upload flow needs a signed request built with its own SDK
-  // helper.
-  getPresignedUploadUrl(businessId: string, fileExtension: string) {
+  // be served from. Photos still POST their bytes to the backend (see
+  // media.controller.ts) so the quality gate can inspect them before
+  // anything is persisted — Cloudinary has no bare presigned-PUT
+  // equivalent anyway, and photos are small enough that this was never
+  // the problem.
+  //
+  // Video is different: the ONLY thing its quality gate checks is
+  // duration (see QualityGateService.checkVideo — it never even reads
+  // the buffer), and duration is knowable client-side before uploading
+  // anything at all. So for video, once Cloudinary is actually
+  // configured, this also returns `signedUpload` — everything the
+  // browser needs to POST the file straight to Cloudinary, never
+  // touching this API's request body at all. That matters because this
+  // API runs on Vercel, whose serverless functions hard-cap request
+  // bodies at 4.5MB — comfortably enough for a photo, routinely not
+  // enough for even a short phone-recorded video (Val, Sep 2026: videos
+  // failed in production with a generic "upload failed" while working
+  // fine locally, where no such platform limit exists). With nothing
+  // configured (local dev default), `signedUpload` is omitted and the
+  // frontend falls back to the exact multipart flow it always used —
+  // unaffected either way.
+  getPresignedUploadUrl(businessId: string, fileExtension: string, type: MediaType) {
     const key = `businesses/${businessId}/${randomUUID()}.${fileExtension}`;
 
     if (this.resolveProvider() === 'local') {
@@ -106,11 +121,36 @@ export class StorageService {
     }
 
     const publicUrl = this.publicUrlForKey(key);
-    return {
+    const base = {
       uploadUrl: publicUrl,
       publicUrl,
       storageKey: key,
       simulated: false,
+    };
+
+    if (type !== MediaType.VIDEO) {
+      return base;
+    }
+
+    const publicId = this.cloudinaryPublicId(key);
+    const timestamp = Math.round(Date.now() / 1000);
+    const apiSecret = this.config.get<string>('CLOUDINARY_API_SECRET')!;
+    // Signature must cover EXACTLY the params the browser's actual
+    // upload POST includes (see the frontend's direct-upload call) — a
+    // mismatch here is the #1 cause of Cloudinary rejecting an
+    // otherwise-correct signed upload.
+    const paramsToSign = { public_id: publicId, timestamp };
+    const signature = cloudinary.utils.api_sign_request(paramsToSign, apiSecret);
+
+    return {
+      ...base,
+      signedUpload: {
+        cloudinaryUploadUrl: `https://api.cloudinary.com/v1_1/${this.config.get('CLOUDINARY_CLOUD_NAME')}/video/upload`,
+        apiKey: this.config.get<string>('CLOUDINARY_API_KEY'),
+        timestamp,
+        signature,
+        publicId,
+      },
     };
   }
 

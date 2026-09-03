@@ -4,18 +4,6 @@
   "sourceRoot": "src",
   "compilerOptions": {
     "deleteOutDir": true,
-    "tsConfigPath": "tsconfig.build.json",
-    "plugins": [
-      {
-        "name": "@nestjs/swagger",
-        "options": {
-          "introspectComments": true,
-          "dtoFileNameSuffix": [
-            ".dto.ts",
-            ".entity.ts"
-          ]
-        }
-      }
-    ]
+    "tsConfigPath": "tsconfig.build.json"
   }
 }

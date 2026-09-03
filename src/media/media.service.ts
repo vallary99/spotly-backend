@@ -50,7 +50,65 @@ export class MediaService {
       );
     }
 
-    return this.storage.getPresignedUploadUrl(businessId, fileExtension);
+    return this.storage.getPresignedUploadUrl(businessId, fileExtension, type);
+  }
+
+  // Step 2 for VIDEO when Cloudinary is configured: the browser already
+  // uploaded the bytes straight to Cloudinary using the signature from
+  // getUploadUrl() above (see StorageService.getPresignedUploadUrl's
+  // `signedUpload` field) — this API's request body never carried the
+  // file at all, which is the whole point (Vercel's 4.5MB body cap,
+  // Val, Sep 2026). All that's left is exactly what
+  // submitForQualityCheck does for the DB/quality-gate side, minus
+  // ever touching a buffer: check duration (the only thing
+  // QualityGateService.checkVideo actually looks at), and if it fails,
+  // delete the file that's already sitting in Cloudinary — rejection
+  // means "undo," not "never happened," which is the one real
+  // trade-off of not gating before persisting the way the multipart
+  // photo path still does.
+  async confirmVideoUpload(params: {
+    businessId: string;
+    ownerId: string;
+    url: string;
+    storageKey: string;
+    durationSeconds: number;
+  }) {
+    const business = await this.businesses.findOne({
+      where: { id: params.businessId },
+    });
+    if (!business) throw new NotFoundException('Business not found.');
+    if (business.ownerId !== params.ownerId)
+      throw new ForbiddenException('You do not own this business.');
+
+    const limits = await this.tierConfig.getLimits(business.tier);
+    const result = await this.qualityGate.checkVideo(
+      Buffer.alloc(0),
+      params.durationSeconds,
+      limits.videoMaxSeconds,
+    );
+
+    if (!result.passed) {
+      await this.storage.deleteObject(params.storageKey);
+      throw new BadRequestException(result.reason);
+    }
+
+    const media = (await this.mediaRepo.save(
+      this.mediaRepo.create({
+        businessId: params.businessId,
+        type: MediaType.VIDEO,
+        url: params.url,
+        storageKey: params.storageKey,
+        status: MediaStatus.APPROVED,
+        durationSeconds: params.durationSeconds,
+      } as any),
+    )) as unknown as Media;
+
+    // Same async safety net as the multipart path — no perceptual hash
+    // for video (never computed one for video before this change
+    // either, see submitForQualityCheck: it's PHOTO-only).
+    this.moderation.queueSpotCheck(media.id);
+
+    return media;
   }
 
   // Step 2 (POST /businesses/:id/media): after the client uploads the raw

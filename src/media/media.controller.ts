@@ -1,21 +1,9 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Param,
-  Post,
-  Query,
-  UploadedFile,
-  UseInterceptors,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Param, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MediaService } from './media.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { MediaType } from './entities/media.entity';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
-@ApiTags('Media')
-@ApiBearerAuth()
 @Controller('businesses/:id/media')
 export class MediaController {
   constructor(private service: MediaService) {}
@@ -55,12 +43,25 @@ export class MediaController {
     });
   }
 
-  @Delete(':mediaId')
-  remove(
+  @Post('confirm-video')
+  confirmVideoUpload(
     @CurrentUser() user: any,
     @Param('id') businessId: string,
-    @Param('mediaId') mediaId: string,
+    @Body('url') url: string,
+    @Body('storageKey') storageKey: string,
+    @Body('durationSeconds') durationSeconds: number,
   ) {
+    return this.service.confirmVideoUpload({
+      businessId,
+      ownerId: user.userId,
+      url,
+      storageKey,
+      durationSeconds,
+    });
+  }
+
+  @Delete(':mediaId')
+  remove(@CurrentUser() user: any, @Param('id') businessId: string, @Param('mediaId') mediaId: string) {
     return this.service.remove(businessId, mediaId, user.userId);
   }
 }

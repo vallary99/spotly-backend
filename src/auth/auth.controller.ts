@@ -1,34 +1,17 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  Req,
-  Res,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Post, Req, Res, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
-import {
-  SignupDto,
-  LoginDto,
-  ForgotPasswordDto,
-  ResetPasswordDto,
-} from './dto/auth.dto';
+import { SignupDto, LoginDto, ForgotPasswordDto, ResetPasswordDto } from './dto/auth.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { GoogleAuthGuard } from './oauth-config.guard';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 interface OAuthUser {
   email: string;
   name: string;
 }
 
-@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -66,7 +49,6 @@ export class AuthController {
   // POST /auth/refresh — requires a valid (not-yet-expired) JWT; re-issues
   // one with current role/businessId. Not @Public() — the guard already
   // gives us req.user.userId.
-  @ApiBearerAuth()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   refresh(@CurrentUser() user: { userId: string }) {
@@ -92,16 +74,9 @@ export class AuthController {
   @Public()
   @UseGuards(GoogleAuthGuard)
   @Get('google/callback')
-  async googleCallback(
-    @Req() req: Request & { user: OAuthUser },
-    @Res() res: Response,
-  ) {
-    const result = await this.auth.oauthLogin({
-      ...req.user,
-      provider: 'google',
-    });
-    const frontendUrl =
-      this.config.get<string>('FRONTEND_URL') || 'http://localhost:3001';
+  async googleCallback(@Req() req: Request & { user: OAuthUser }, @Res() res: Response) {
+    const result = await this.auth.oauthLogin({ ...req.user, provider: 'google' });
+    const frontendUrl = this.config.get<string>('FRONTEND_URL') || 'http://localhost:3001';
     res.redirect(`${frontendUrl}/auth/callback?token=${result.accessToken}`);
   }
 }

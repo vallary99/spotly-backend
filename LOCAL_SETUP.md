@@ -64,7 +64,7 @@ npm install
 ```
 
 Copy the example env file. Which file the app reads is decided by
-`NODE_ENV` — `local` reads `.env.local`, `production` reads `.env.prod`, and
+`NODE_ENV` — `local` reads `.env.local`, `prod` reads `.env.prod`, and
 `npm run start:dev` sets `NODE_ENV=local` for you:
 
 ```bash
