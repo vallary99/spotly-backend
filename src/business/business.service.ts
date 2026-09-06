@@ -203,6 +203,17 @@ export class BusinessService {
   // POST /businesses — FR-7.1/7.2/7.3: begins onboarding with Venue or
   // Experience Host type; a user may own at most one Business Account.
   async create(userId: string, dto: CreateBusinessDto) {
+    // Checked before anything else — no point checking category limits
+    // or the first-cohort count for a request that's about to be
+    // rejected anyway. (Val, Sep 2026: "Business should not be able to
+    // create a profile without email verification.")
+    const requestingUser = await this.users.findOne({ where: { id: userId } });
+    if (!requestingUser?.emailVerified) {
+      throw new ForbiddenException(
+        'Please verify your email address before listing a business — check your inbox for the verification link, or request a new one.',
+      );
+    }
+
     const existing = await this.businesses.findOne({ where: { ownerId: userId } });
     if (existing) {
       throw new ConflictException('This account already has a registered business.');

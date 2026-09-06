@@ -243,6 +243,32 @@ export class EmailService {
   // requesting frontend's own origin — the same backend serves both
   // spotly-web and spotly-admin, and each needs the link to land on
   // ITS OWN reset-password page, not a hardcoded one.
+  // Not admin-editable via the template system, same reasoning as
+  // sendPasswordResetEmail below — this is a security-adjacent, correct-
+  // by-construction flow, not marketing/announcement copy; keeping it
+  // hardcoded means an admin can't accidentally break the verification
+  // link by editing a template.
+  async sendVerificationEmail(to: string, name: string, verifyUrl: string) {
+    return this.send({
+      to,
+      subject: 'Verify your email for Spotly',
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">Verify your email</h1>
+          <p>Hi ${escapeHtml(name)}, one quick step to finish setting up your Spotly account — confirm this is really your email address. This link expires in 24 hours.</p>
+          <p style="margin-top: 24px;">
+            <a href="${verifyUrl}" style="background:#C7653A;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;">
+              Verify email
+            </a>
+          </p>
+          <p style="margin-top: 24px; font-size: 13px; color: #9E6B4A;">
+            Didn't create a Spotly account? You can safely ignore this email.
+          </p>
+        </div>
+      `,
+    });
+  }
+
   async sendPasswordResetEmail(to: string, name: string, resetUrl: string) {
     return this.send({
       to,
@@ -306,6 +332,12 @@ export class EmailService {
   queuePasswordResetEmail(to: string, name: string, resetUrl: string): void {
     runInBackground(this.logger, `password-reset ${to}`, () =>
       this.sendPasswordResetEmail(to, name, resetUrl),
+    );
+  }
+
+  queueVerificationEmail(to: string, name: string, verifyUrl: string): void {
+    runInBackground(this.logger, `email-verification ${to}`, () =>
+      this.sendVerificationEmail(to, name, verifyUrl),
     );
   }
 

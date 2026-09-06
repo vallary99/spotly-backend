@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -18,6 +19,7 @@ export class AuthService {
     @InjectRepository(User) private users: Repository<User>,
     private jwt: JwtService,
     private email: EmailService,
+    private config: ConfigService,
   ) {}
 
   async signup(dto: SignupDto) {
@@ -35,6 +37,9 @@ export class AuthService {
       }),
     );
     this.email.queueWelcomeEmail(user.email, user.name);
+    // Fire-and-forget, same as the welcome email above — signup
+    // shouldn't wait on (or fail because of) an email provider hiccup.
+    this.sendVerificationEmail(user, dto.verifyUrlBase);
     return this.issueToken(user);
   }
 
@@ -48,6 +53,58 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password.');
     }
     return this.issueToken(user);
+  }
+
+  // Shared by signup() and resendVerificationEmail() — generates a
+  // fresh token (overwriting any previous one, same reasoning as
+  // password reset: one active verification link at a time is correct,
+  // a new request should invalidate an older unused one) and emails it.
+  // Falls back to FRONTEND_URL when the caller didn't send an origin —
+  // see SignupDto.verifyUrlBase for why that's optional rather than
+  // required.
+  private async sendVerificationEmail(user: User, verifyUrlBase?: string) {
+    const token = randomBytes(32).toString('hex');
+    user.emailVerificationToken = token;
+    user.emailVerificationExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    await this.users.save(user);
+    const base = verifyUrlBase || this.config.get<string>('FRONTEND_URL') || 'http://localhost:3001';
+    const verifyUrl = `${base.replace(/\/$/, '')}/verify-email?token=${token}`;
+    this.email.queueVerificationEmail(user.email, user.name, verifyUrl);
+  }
+
+  // POST /auth/resend-verification — same "always return the same
+  // generic response" reasoning as requestPasswordReset: never confirms
+  // or denies whether an email has an account, or whether it's already
+  // verified, so this can't be used to enumerate registered/verified
+  // emails either.
+  async resendVerificationEmail(email: string, verifyUrlBase?: string) {
+    const user = await this.users.findOne({ where: { email } });
+    if (user && !user.emailVerified) {
+      await this.sendVerificationEmail(user, verifyUrlBase);
+    }
+    return { message: "If that email has an unverified account, we've sent a new verification link." };
+  }
+
+  // POST /auth/verify-email
+  // Returns a full login response (accessToken + user), not just a
+  // message — clicking a verification link proves the same thing a
+  // password does (control of the account's email), so there's no
+  // reason to make someone ALSO re-enter their password right after
+  // (Val, Sep 2026: "once they click that verify email they should be
+  // ... logged in"). Whatever tab/window the link actually opens in is
+  // up to the OS/email client, not something this can control — but
+  // wherever it lands, it now lands signed in.
+  async verifyEmail(token: string) {
+    const user = await this.users.findOne({ where: { emailVerificationToken: token } });
+    if (!user || !user.emailVerificationExpiresAt || user.emailVerificationExpiresAt < new Date()) {
+      throw new UnauthorizedException('This verification link is invalid or has expired — request a new one.');
+    }
+    user.emailVerified = true;
+    user.emailVerificationToken = null;
+    user.emailVerificationExpiresAt = null;
+    await this.users.save(user);
+    const auth = await this.issueToken(user);
+    return { message: 'Email verified — thanks for confirming!', ...auth };
   }
 
   // POST /auth/forgot-password — deliberately always returns the same
@@ -93,6 +150,11 @@ export class AuthService {
           name: params.name || params.email.split('@')[0],
           authProvider: params.provider,
           role: UserRole.REGISTERED,
+          // Google itself already confirmed this person controls this
+          // email address before ever redirecting back here — sending
+          // our own "click to verify" link on top of that would just be
+          // a redundant extra step for zero added trust.
+          emailVerified: true,
           // no passwordHash — this account signs in via OAuth. If they
           // later use "forgot password," resetPassword() doesn't check
           // whether one was already set, so that flow doubles as "add a
@@ -136,7 +198,7 @@ export class AuthService {
     };
     return {
       accessToken: this.jwt.sign(payload),
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, emailVerified: user.emailVerified },
     };
   }
 }

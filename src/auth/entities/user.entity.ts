@@ -44,6 +44,21 @@ export class User {
   @Column({ type: 'timestamptz', nullable: true })
   passwordResetExpiresAt: Date | null;
 
+  // Email-ownership verification — same exact pattern as the
+  // password-reset fields above, see AuthService.verifyEmail/
+  // resendVerificationEmail. Defaults false for new signups; existing
+  // accounts were backfilled to true when this was added (Val, Sep
+  // 2026), so this only affects new signups going forward, not anyone
+  // already using the app.
+  @Column({ default: false })
+  emailVerified: boolean;
+
+  @Column({ type: 'varchar', nullable: true })
+  emailVerificationToken: string | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  emailVerificationExpiresAt: Date | null;
+
   @Column()
   name: string;
 
