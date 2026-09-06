@@ -5,9 +5,14 @@ import {
   CreateDateColumn,
 } from 'typeorm';
 
-// One row per admin-initiated send (a "campaign"), not one row per
-// recipient — recipientCount + a snapshot of which businesses actually
-// got it is enough for an accountability trail without a huge table.
+// One row per RECIPIENT business, not one row per campaign (changed
+// Sep 2026 — a broadcast to 2 businesses used to log as a single
+// "recipientCount: 2" row with no way to tell which two without
+// opening businessIds; Val: "show the emails one by one... so the
+// email shows welcome email for business A and B"). recipientCount and
+// businessIds stay populated (trivially, as 1 and [businessId]) on
+// every new row for backward compatibility with the couple of rows
+// that predate this and never got a businessId/businessName at all.
 // Part of the broader "who did what" admin audit trail alongside
 // suspensions/discounts, which currently only show their *result* (the
 // business row) with no record of the action itself — a real gap, but
@@ -25,6 +30,12 @@ export class EmailSendLog {
 
   @Column()
   subject: string; // rendered subject of the FIRST recipient, for a quick glance in the log
+
+  @Column({ type: 'uuid', nullable: true })
+  businessId: string | null; // the one business THIS row is about — null on rows logged before this column existed
+
+  @Column({ type: 'varchar', nullable: true })
+  businessName: string | null; // denormalized snapshot, same reasoning as templateName
 
   @Column({ type: 'jsonb' })
   filters: Record<string, unknown>; // the AdminBusinessFilters used to select recipients

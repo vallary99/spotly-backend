@@ -122,27 +122,32 @@ export class AdminEmailService {
     for (const business of results) {
       if (!business.ownerEmail) continue; // shouldn't happen (every business has an owner), but never let one bad row break the whole batch
       const vars = { ...business, businessName: business.name, ownerName: (business as any).ownerName };
-      this.email.queueGeneralEmail(
-        business.ownerEmail,
-        this.renderTemplate(subject, vars),
-        this.renderTemplate(body, vars),
-      );
+      const renderedSubject = this.renderTemplate(subject, vars);
+      this.email.queueGeneralEmail(business.ownerEmail, renderedSubject, this.renderTemplate(body, vars));
       queued++;
+
+      // One log row per actual recipient (Val, Sep 2026) — each with
+      // ITS OWN correctly-rendered subject, not the whole campaign's
+      // subject borrowed from whichever business happened to match
+      // first. recipientCount/businessIds stay populated trivially for
+      // any code still reading them, but businessId/businessName below
+      // are what the admin panel's history table actually shows now.
+      await this.sendLogs.save(
+        this.sendLogs.create({
+          templateId: params.templateId ?? null,
+          templateName,
+          subject: renderedSubject,
+          businessId: business.id,
+          businessName: business.name,
+          filters: params.filters as Record<string, unknown>,
+          recipientCount: 1,
+          businessIds: [business.id],
+          sentByAdminId: params.adminUserId,
+        }),
+      );
     }
 
-    const log = await this.sendLogs.save(
-      this.sendLogs.create({
-        templateId: params.templateId ?? null,
-        templateName,
-        subject: this.renderTemplate(subject, { ...results[0], businessName: results[0].name, ownerName: (results[0] as any).ownerName }),
-        filters: params.filters as Record<string, unknown>,
-        recipientCount: queued,
-        businessIds: results.map((r) => r.id),
-        sentByAdminId: params.adminUserId,
-      }),
-    );
-
-    return { queued, totalMatched: results.length, logId: log.id };
+    return { queued, totalMatched: results.length };
   }
 
   // GET /admin/email-sends — the accountability trail.
