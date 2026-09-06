@@ -46,8 +46,8 @@ export class EmailSendLog {
   @Column({ type: 'jsonb' })
   businessIds: string[];
 
-  @Column()
-  sentByAdminId: string;
+  @Column({ type: 'varchar', nullable: true })
+  sentByAdminId: string | null; // null = an automatic system send (signup, first-photo-approval), not an admin click
 
   @CreateDateColumn()
   createdAt: Date;

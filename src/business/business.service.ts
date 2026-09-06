@@ -245,7 +245,7 @@ export class BusinessService {
       // first photo is actually approved (see
       // MediaService.submitForQualityCheck), which is the moment
       // that's actually true (Val, Sep 2026).
-      this.email.queueBusinessNeedsPhotoEmail(owner.email, business.name);
+      this.email.queueBusinessNeedsPhotoEmail(owner.email, business.name, business.id);
     }
     return business;
   }

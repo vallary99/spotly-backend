@@ -200,7 +200,7 @@ export class MediaService {
     if (isFirstPhoto) {
       const owner = await this.users.findOne({ where: { id: business.ownerId } });
       if (owner) {
-        this.email.queueBusinessWelcomeEmail(owner.email, business.name);
+        this.email.queueBusinessWelcomeEmail(owner.email, business.name, business.id);
       }
     }
 

@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Resend } from 'resend';
 import { runInBackground } from '../common/utils/background.util';
 import { EmailTemplate } from './entities/email-template.entity';
+import { EmailSendLog } from './entities/email-send-log.entity';
 
 // Wraps Resend (resend.com) for transactional and general-update email.
 // Chosen over SES/SendGrid/Postmark for MVP because its free tier (3,000
@@ -27,6 +28,7 @@ export class EmailService {
   constructor(
     private config: ConfigService,
     @InjectRepository(EmailTemplate) private templates: Repository<EmailTemplate>,
+    @InjectRepository(EmailSendLog) private sendLogs: Repository<EmailSendLog>,
   ) {
     const apiKey = this.config.get<string>('RESEND_API_KEY');
     if (apiKey) {
@@ -79,11 +81,46 @@ export class EmailService {
   private async renderBuiltIn(
     key: string,
     vars: Record<string, string>,
-  ): Promise<{ subject: string; html: string } | null> {
+  ): Promise<{ id: string; subject: string; html: string } | null> {
     const row = await this.templates.findOne({ where: { key } });
     if (!row) return null;
     const render = (text: string) => text.replace(/\{\{(\w+)\}\}/g, (_m, k) => vars[k] ?? '');
-    return { subject: render(row.subject), html: render(row.body) };
+    return { id: row.id, subject: render(row.subject), html: render(row.body) };
+  }
+
+  // Gives the two automatic welcome emails an entry in the same Send
+  // History table AdminEmailService's broadcasts already write to
+  // (Val, Sep 2026: "can you confirm the automatic email will also be
+  // part of the logs?" — it wasn't, this is what adds it).
+  // sentByAdminId is always null here — that's specifically what tells
+  // the admin panel to show "System" instead of an admin's name for
+  // this row.
+  private async logAutomaticSend(params: {
+    templateId: string | null;
+    templateName: string;
+    subject: string;
+    businessId: string;
+    businessName: string;
+  }) {
+    try {
+      await this.sendLogs.save(
+        this.sendLogs.create({
+          templateId: params.templateId,
+          templateName: params.templateName,
+          subject: params.subject,
+          businessId: params.businessId,
+          businessName: params.businessName,
+          filters: {},
+          recipientCount: 1,
+          businessIds: [params.businessId],
+          sentByAdminId: null,
+        }),
+      );
+    } catch (err) {
+      // Logging failure should never take down the email send itself —
+      // same "best-effort" posture as send()'s own error handling below.
+      this.logger.warn(`Failed to write send log for ${params.templateName}: ${err}`);
+    }
   }
 
   async sendWelcomeEmail(to: string, name: string) {
@@ -114,14 +151,13 @@ export class EmailService {
   // 2026). sendBusinessWelcomeEmail now fires later instead, once a
   // business's first photo is actually approved — see
   // MediaService.submitForQualityCheck.
-  async sendBusinessNeedsPhotoEmail(to: string, businessName: string) {
+  async sendBusinessNeedsPhotoEmail(to: string, businessName: string, businessId: string) {
     const rendered = await this.renderBuiltIn('WELCOME_NEEDS_PHOTO', { businessName });
-    if (rendered) return this.send({ to, ...rendered });
-
-    return this.send({
-      to,
-      subject: 'Welcome to Spotly! 📍',
-      html: `
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? 'Welcome to Spotly! 📍';
+    const html =
+      rendered?.html ??
+      `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
           <h1 style="color: #7A3C2C; font-size: 22px;">Welcome to Spotly! 📍</h1>
           <p>Hello,</p>
@@ -131,22 +167,29 @@ export class EmailService {
           <p>Thank you for joining us!</p>
           <p>Best,<br />The Spotly Team</p>
         </div>
-      `,
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({
+      templateId,
+      templateName: 'Welcome Email (needs a photo)',
+      subject,
+      businessId,
+      businessName,
     });
+    return result;
   }
 
   // Admin-editable via the "Welcome Email" built-in template (see
   // spotly-admin's Email Templates page) — falls back to this
   // hardcoded copy if that row's ever missing, so registration/business
   // approval never breaks over an email-content edit gone wrong.
-  async sendBusinessWelcomeEmail(to: string, businessName: string) {
+  async sendBusinessWelcomeEmail(to: string, businessName: string, businessId: string) {
     const rendered = await this.renderBuiltIn('WELCOME_BUSINESS', { businessName });
-    if (rendered) return this.send({ to, ...rendered });
-
-    return this.send({
-      to,
-      subject: `${businessName} is now live on Spotly! 🎉`,
-      html: `
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? `${businessName} is now live on Spotly! 🎉`;
+    const html =
+      rendered?.html ??
+      `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
           <h1 style="color: #7A3C2C; font-size: 22px;">${escapeHtml(businessName)} is now live on Spotly! 🎉</h1>
           <p>Your business is now visible for discovery on Spotly! 🎉 We're so excited to have you
@@ -157,8 +200,16 @@ export class EmailService {
           business. 📍</p>
           <p>Best,<br />The Spotly Team</p>
         </div>
-      `,
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({
+      templateId,
+      templateName: 'Welcome Email (business live)',
+      subject,
+      businessId,
+      businessName,
     });
+    return result;
   }
 
   // Fired from AdminBusinessService.suspend() when an admin gives an
@@ -228,15 +279,15 @@ export class EmailService {
     );
   }
 
-  queueBusinessWelcomeEmail(to: string, businessName: string): void {
+  queueBusinessWelcomeEmail(to: string, businessName: string, businessId: string): void {
     runInBackground(this.logger, `welcome-business ${to}`, () =>
-      this.sendBusinessWelcomeEmail(to, businessName),
+      this.sendBusinessWelcomeEmail(to, businessName, businessId),
     );
   }
 
-  queueBusinessNeedsPhotoEmail(to: string, businessName: string): void {
+  queueBusinessNeedsPhotoEmail(to: string, businessName: string, businessId: string): void {
     runInBackground(this.logger, `welcome-business-needs-photo ${to}`, () =>
-      this.sendBusinessNeedsPhotoEmail(to, businessName),
+      this.sendBusinessNeedsPhotoEmail(to, businessName, businessId),
     );
   }
 
