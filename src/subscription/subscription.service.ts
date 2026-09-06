@@ -53,6 +53,12 @@ export class SubscriptionService {
       status: business.subscriptionStatus,
       isGrandfathered: business.isGrandfathered,
       discountPercent: business.discountPercent,
+      // Same countdown concept as an active trial's endsAt, for the
+      // OTHER way a tier can be at risk of reverting to Starter — a
+      // missed/failed renewal payment (Val, Sep 2026: "the countdown is
+      // for both trial and plan"). Only meaningful when status is
+      // GRACE_PERIOD; null otherwise.
+      gracePeriodEndsAt: business.gracePeriodEndsAt,
       // Surfaced so the dashboard can hide the manual pay-for-a-tier
       // picker while a first-cohort trial offer is still pending
       // activation (Val, Sep 2026: "disabling the other tiers") — they
