@@ -238,7 +238,14 @@ export class BusinessService {
     await this.users.update(userId, { role: UserRole.BUSINESS_OWNER });
     const owner = await this.users.findOne({ where: { id: userId } });
     if (owner) {
-      this.email.queueBusinessWelcomeEmail(owner.email, business.name);
+      // A brand new business has zero photos — added in a separate
+      // dashboard step, never at creation — so it genuinely isn't
+      // visible to public discovery yet. This nudges them to add one;
+      // the "you're live!" email now fires later instead, once their
+      // first photo is actually approved (see
+      // MediaService.submitForQualityCheck), which is the moment
+      // that's actually true (Val, Sep 2026).
+      this.email.queueBusinessNeedsPhotoEmail(owner.email, business.name);
     }
     return business;
   }

@@ -8,20 +8,24 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media, MediaStatus, MediaType } from './entities/media.entity';
 import { Business } from '../business/entities/business.entity';
+import { User } from '../auth/entities/user.entity';
 import { QualityGateService } from './quality-gate.service';
 import { StorageService } from './storage.service';
 import { TierConfigService } from '../subscription/tier-config.service';
 import { ModerationService } from '../tasks/moderation.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class MediaService {
   constructor(
     @InjectRepository(Media) private mediaRepo: Repository<Media>,
     @InjectRepository(Business) private businesses: Repository<Business>,
+    @InjectRepository(User) private users: Repository<User>,
     private qualityGate: QualityGateService,
     private storage: StorageService,
     private tierConfig: TierConfigService,
     private moderation: ModerationService,
+    private email: EmailService,
   ) {}
 
   // Step 1: client asks for a place to upload to.
@@ -153,6 +157,15 @@ export class MediaService {
         ? await this.qualityGate.computePerceptualHash(params.buffer)
         : null;
 
+    // Captured BEFORE saving the new row below, so this reflects
+    // whether the business had a photo before this one specifically —
+    // needed to detect the "just became visible" moment further down.
+    const isFirstPhoto =
+      params.type === MediaType.PHOTO &&
+      (await this.mediaRepo.count({
+        where: { businessId: params.businessId, type: MediaType.PHOTO, status: MediaStatus.APPROVED },
+      })) === 0;
+
     // Persist the actual bytes now that they've passed the gate — to
     // local disk in dev, or to Cloudinary once CLOUDINARY_* credentials
     // are configured (see StorageService.saveFile, which branches on
@@ -176,6 +189,19 @@ export class MediaService {
     this.moderation.queueSpotCheck(media.id);
     if (perceptualHash) {
       this.moderation.queueDuplicateCheck(media.id, perceptualHash);
+    }
+
+    // The "you're live!" email fires HERE now, not at business
+    // creation — a business with zero photos genuinely isn't visible
+    // to public discovery yet, so saying "is live" at creation was
+    // never accurate (Val, Sep 2026; see BusinessService.create, which
+    // sends the "needs a photo" nudge instead at that point). This is
+    // the moment it actually becomes true: the first approved photo.
+    if (isFirstPhoto) {
+      const owner = await this.users.findOne({ where: { id: business.ownerId } });
+      if (owner) {
+        this.email.queueBusinessWelcomeEmail(owner.email, business.name);
+      }
     }
 
     return media;

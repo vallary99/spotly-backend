@@ -105,6 +105,36 @@ export class EmailService {
     });
   }
 
+  // Admin-editable via the "Welcome Email (needs a photo)" built-in
+  // template — falls back to this hardcoded copy if that row's ever
+  // missing. Fires at business creation, replacing the old always-fires
+  // sendBusinessWelcomeEmail call there — a brand new business has zero
+  // photos and genuinely isn't visible to public discovery yet, so
+  // saying "is live" at that exact moment was never accurate (Val, Sep
+  // 2026). sendBusinessWelcomeEmail now fires later instead, once a
+  // business's first photo is actually approved — see
+  // MediaService.submitForQualityCheck.
+  async sendBusinessNeedsPhotoEmail(to: string, businessName: string) {
+    const rendered = await this.renderBuiltIn('WELCOME_NEEDS_PHOTO', { businessName });
+    if (rendered) return this.send({ to, ...rendered });
+
+    return this.send({
+      to,
+      subject: 'Welcome to Spotly! 📍',
+      html: `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">Welcome to Spotly! 📍</h1>
+          <p>Hello,</p>
+          <p>Welcome to Spotly! We're excited to have ${escapeHtml(businessName)} on board. 🎉</p>
+          <p>Your business profile has been created. There's just one quick step left: upload at
+          least one image to your profile so your business can be discovered on Spotly.</p>
+          <p>Thank you for joining us!</p>
+          <p>Best,<br />The Spotly Team</p>
+        </div>
+      `,
+    });
+  }
+
   // Admin-editable via the "Welcome Email" built-in template (see
   // spotly-admin's Email Templates page) — falls back to this
   // hardcoded copy if that row's ever missing, so registration/business
@@ -115,12 +145,17 @@ export class EmailService {
 
     return this.send({
       to,
-      subject: `${businessName} is live on Spotly!`,
+      subject: `${businessName} is now live on Spotly! 🎉`,
       html: `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
-          <h1 style="color: #7A3C2C; font-size: 22px;">${escapeHtml(businessName)} is live!</h1>
-          <p>Your business is now discoverable on Spotly. Head to your Business Owner Surface
-          to add photos, track views, and manage experiences.</p>
+          <h1 style="color: #7A3C2C; font-size: 22px;">${escapeHtml(businessName)} is now live on Spotly! 🎉</h1>
+          <p>Your business is now visible for discovery on Spotly! 🎉 We're so excited to have you
+          join the Spotly community.</p>
+          <p>You can also see how many people visit and save your business profile directly from
+          your dashboard.</p>
+          <p>We're happy to have you with us and look forward to helping more people discover your
+          business. 📍</p>
+          <p>Best,<br />The Spotly Team</p>
         </div>
       `,
     });
@@ -196,6 +231,12 @@ export class EmailService {
   queueBusinessWelcomeEmail(to: string, businessName: string): void {
     runInBackground(this.logger, `welcome-business ${to}`, () =>
       this.sendBusinessWelcomeEmail(to, businessName),
+    );
+  }
+
+  queueBusinessNeedsPhotoEmail(to: string, businessName: string): void {
+    runInBackground(this.logger, `welcome-business-needs-photo ${to}`, () =>
+      this.sendBusinessNeedsPhotoEmail(to, businessName),
     );
   }
 
