@@ -29,12 +29,37 @@ export function getMigrationsGlob(nodeEnv = process.env.NODE_ENV): string {
     : `dist/database/${dir}/*.js`;
 }
 
-const URL_VARS = [
+// Which connection a caller actually needs — see buildDataSourceOptions.
+// This distinction is the fix for a real production incident (Sep 2026):
+// the live API was crashing outright with "max clients reached in
+// session mode - pool_size: 15", because it was using the SAME
+// session-mode/direct connection the migration CLI needs, for every
+// ordinary request too. Session mode holds one real Postgres backend
+// connection per client for the client's whole lifetime — fine for a
+// short-lived migration script, but a serverless API can have several
+// function instances alive at once, each wanting its own connection,
+// and 15 total disappears fast under even modest concurrent traffic.
+export type ConnectionMode = 'app' | 'migration';
+
+const MIGRATION_URL_VARS = [
   'DATABASE_URL',
   // Injected by Vercel's Supabase integration. The pooled sibling
-  // (DATABASE_POSTGRES_URL, pgBouncer on 6543) is deliberately not used:
-  // transaction pooling breaks the advisory locks and DDL that migrations
-  // depend on, and one wrong connection there is a stuck migration.
+  // (DATABASE_POSTGRES_URL, pgBouncer on 6543) is deliberately not used
+  // HERE: transaction pooling breaks the advisory locks and DDL that
+  // migrations depend on, and one wrong connection there is a stuck
+  // migration. The live app below uses the opposite preference.
+  'DATABASE_POSTGRES_URL_NON_POOLING',
+] as const;
+
+const APP_URL_VARS = [
+  // Same pgBouncer-pooled connection the migration comment above warns
+  // migrations away from — that warning doesn't apply here. A
+  // transaction-mode pooler multiplexes many logical clients over a
+  // much smaller number of real backend connections, which is exactly
+  // what a serverless API with several concurrent instances needs, and
+  // is the opposite of what was actually deployed before this fix.
+  'DATABASE_POSTGRES_URL',
+  'DATABASE_URL',
   'DATABASE_POSTGRES_URL_NON_POOLING',
 ] as const;
 
@@ -45,35 +70,37 @@ const URL_VARS = [
 // stripped and its intent handed to getSsl(), which knows how to use
 // DATABASE_CA_CERT. Everything before the query string is left byte for
 // byte, so passwords are never re-encoded.
-function resolveUrl(): { url: string; sslRequested: boolean } | null {
-  for (const key of URL_VARS) {
+function resolveUrl(mode: ConnectionMode): { url: string; sslRequested: boolean } | null {
+  const vars = mode === 'app' ? APP_URL_VARS : MIGRATION_URL_VARS;
+  for (const key of vars) {
     const raw = process.env[key];
     if (!raw) continue;
     const [base, query] = raw.split('?');
     const params = new URLSearchParams(query ?? '');
-    const mode = params.get('sslmode');
+    const sslMode = params.get('sslmode');
     params.delete('sslmode');
     const rest = params.toString();
     return {
       url: rest ? `${base}?${rest}` : base,
-      sslRequested: mode !== null && mode !== 'disable',
+      sslRequested: sslMode !== null && sslMode !== 'disable',
     };
   }
   return null;
 }
 
-function getConnection(): Pick<
+function getConnection(mode: ConnectionMode): Pick<
   PostgresConnectionOptions,
   'url' | 'host' | 'port' | 'username' | 'password' | 'database'
 > {
-  const resolved = resolveUrl();
+  const resolved = resolveUrl(mode);
   if (resolved) {
     return { url: resolved.url };
   }
   if (!process.env.POSTGRES_HOST) {
+    const vars = mode === 'app' ? APP_URL_VARS : MIGRATION_URL_VARS;
     throw new Error(
       `No database configured for NODE_ENV=${process.env.NODE_ENV ?? '(unset)'}. ` +
-        `Set one of ${URL_VARS.join(', ')}, or POSTGRES_HOST — in ${getEnvFile()}, or as real environment ` +
+        `Set one of ${vars.join(', ')}, or POSTGRES_HOST — in ${getEnvFile()}, or as real environment ` +
         `variables if this is a deployed host. Refusing to fall back to a default, because ` +
         `a "prod" command quietly connecting to localhost is how a local database gets ` +
         `migrated by mistake.`,
@@ -102,16 +129,32 @@ function getSsl(sslRequestedByUrl: boolean): PostgresConnectionOptions['ssl'] {
   };
 }
 
-export function buildDataSourceOptions(): DataSourceOptions {
+// mode defaults to 'migration' — datasource.ts (the CLI) relies on that
+// default and never passes anything; typeorm.config.ts (the live app,
+// see below) is the one place that explicitly asks for 'app'.
+export function buildDataSourceOptions(mode: ConnectionMode = 'migration'): DataSourceOptions {
   return {
     type: 'postgres',
-    ...getConnection(),
-    ssl: getSsl(resolveUrl()?.sslRequested ?? false),
+    ...getConnection(mode),
+    ssl: getSsl(resolveUrl(mode)?.sslRequested ?? false),
     entities: ENTITIES,
     migrations: [getMigrationsGlob()],
     migrationsTableName: 'migrations',
     synchronize: false,
     migrationsRun: false,
     logging: process.env.DATABASE_LOGGING === 'true',
+    ...(mode === 'app'
+      ? {
+          // Conservative cap, not just relying on the pooled connection
+          // string alone — belt and suspenders. Each serverless
+          // function instance only ever needs a handful of connections
+          // for its own concurrent requests, not TypeORM's default
+          // pool size (10); keeping this small leaves headroom under
+          // the provider's total cap even if several instances are
+          // warm at once. Tune upward only alongside actually
+          // upgrading the Postgres plan's connection limit.
+          extra: { max: 3 },
+        }
+      : {}),
   };
 }
