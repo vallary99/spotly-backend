@@ -150,6 +150,67 @@ export class AdminEmailService {
     return { queued, totalMatched: results.length };
   }
 
+  // POST /admin/email-templates/send-manual — outreach to people who
+  // AREN'T businesses in the system yet (a prospect who hasn't signed
+  // up), so there's no AdminBusinessFilters query to run against; the
+  // admin just types the recipient email(s) directly (Val, Sep 2026).
+  // {{variable}} tokens have nothing to substitute against here (no
+  // business record exists yet) — they're just left blank, which is
+  // expected for genuinely generic outreach copy.
+  async sendManual(params: {
+    templateId?: string;
+    subject?: string;
+    body?: string;
+    emails: string[];
+    adminUserId: string;
+  }) {
+    let subject = params.subject;
+    let body = params.body;
+    let templateName = 'Ad-hoc outreach';
+    let templateId: string | null = null;
+
+    if (params.templateId) {
+      const t = await this.getTemplate(params.templateId);
+      subject = t.subject;
+      body = t.body;
+      templateName = t.name;
+      templateId = t.id;
+    }
+    if (!subject || !body) {
+      throw new BadRequestException('Either templateId or both subject and body are required.');
+    }
+    const emails = [...new Set(params.emails.map((e) => e.trim()).filter(Boolean))];
+    if (emails.length === 0) {
+      throw new BadRequestException('At least one recipient email is required.');
+    }
+    if (emails.length > MAX_RECIPIENTS_PER_SEND) {
+      throw new BadRequestException(`Too many recipients — ${MAX_RECIPIENTS_PER_SEND} max per send.`);
+    }
+
+    for (const to of emails) {
+      this.email.queueGeneralEmail(to, subject, body);
+      // businessId stays null (no business exists for a prospect) —
+      // businessName holds the raw recipient email instead, so the
+      // history table still shows exactly who each row went to rather
+      // than a blank cell.
+      await this.sendLogs.save(
+        this.sendLogs.create({
+          templateId,
+          templateName,
+          subject,
+          businessId: null,
+          businessName: to,
+          filters: {},
+          recipientCount: 1,
+          businessIds: [],
+          sentByAdminId: params.adminUserId,
+        }),
+      );
+    }
+
+    return { queued: emails.length };
+  }
+
   // GET /admin/email-sends — the accountability trail.
   getSendHistory() {
     return this.sendLogs.find({ order: { createdAt: 'DESC' }, take: 100 });

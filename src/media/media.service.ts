@@ -7,7 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Media, MediaStatus, MediaType } from './entities/media.entity';
-import { Business } from '../business/entities/business.entity';
+import { Business, ListingStatus } from '../business/entities/business.entity';
 import { User } from '../auth/entities/user.entity';
 import { QualityGateService } from './quality-gate.service';
 import { StorageService } from './storage.service';
@@ -198,6 +198,18 @@ export class MediaService {
     // sends the "needs a photo" nudge instead at that point). This is
     // the moment it actually becomes true: the first approved photo.
     if (isFirstPhoto) {
+      // Flips the discoverability lifecycle back to ACTIVE — whether
+      // this business was PENDING (first photo ever) or had gone
+      // INACTIVE after a month with none, uploading a photo at any
+      // point immediately revives it (Val, Sep 2026). Also clears the
+      // reminder timestamp so a LATER photo-less stretch (if the photo
+      // is later removed) starts its own fresh 7/14/21/28-day cycle
+      // rather than resuming a stale one.
+      if (business.listingStatus !== ListingStatus.ACTIVE) {
+        business.listingStatus = ListingStatus.ACTIVE;
+        business.lastPendingReminderAt = null;
+        await this.businesses.save(business);
+      }
       const owner = await this.users.findOne({ where: { id: business.ownerId } });
       if (owner) {
         this.email.queueBusinessWelcomeEmail(owner.email, business.name, business.id);

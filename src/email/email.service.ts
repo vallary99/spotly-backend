@@ -239,6 +239,39 @@ export class EmailService {
     return this.send({ to, ...rendered });
   }
 
+  // Fired every 7 days (up to 4 times) by
+  // ListingLifecycleService.sweepPendingListings for a business that
+  // still hasn't uploaded a photo — logged the same way the two welcome
+  // emails are (Val, Sep 2026's earlier "the automatic email should
+  // also be part of the logs"), since this is exactly that same kind
+  // of system-triggered send.
+  async sendPendingDiscoveryEmail(to: string, ownerName: string, businessName: string, businessId: string) {
+    const rendered = await this.renderBuiltIn('PENDING_DISCOVERY', { ownerName, businessName });
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? `${businessName} isn't showing up on Spotly yet`;
+    const html =
+      rendered?.html ??
+      `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">One photo away from being discovered</h1>
+          <p>Hi ${escapeHtml(ownerName)},</p>
+          <p>${escapeHtml(businessName)} is set up on Spotly, but it still isn't visible to people
+          browsing the app — that just needs one photo. Add it whenever you're ready and your
+          business goes live right away.</p>
+          <p>Best,<br />The Spotly Team</p>
+        </div>
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({
+      templateId,
+      templateName: 'Pending Discovery Reminder',
+      subject,
+      businessId,
+      businessName,
+    });
+    return result;
+  }
+
   // resetUrl is built by the caller (AuthService), which is handed the
   // requesting frontend's own origin — the same backend serves both
   // spotly-web and spotly-admin, and each needs the link to land on
@@ -326,6 +359,12 @@ export class EmailService {
   queueDeactivationEmail(to: string, ownerName: string, businessName: string): void {
     runInBackground(this.logger, `deactivation ${to}`, () =>
       this.sendDeactivationEmail(to, ownerName, businessName),
+    );
+  }
+
+  queuePendingDiscoveryEmail(to: string, ownerName: string, businessName: string, businessId: string): void {
+    runInBackground(this.logger, `pending-discovery ${to}`, () =>
+      this.sendPendingDiscoveryEmail(to, ownerName, businessName, businessId),
     );
   }
 

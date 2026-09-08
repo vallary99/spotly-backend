@@ -8,7 +8,7 @@ import { AdminModerationService } from './admin-moderation.service';
 import { AdminEmailService } from './admin-email.service';
 import { AdminBusinessQueryDto, SuspendBusinessDto, SetHiddenGemDto, DiscountCampaignDto, TrialCampaignDto, TransactionQueryDto } from './dto/admin-business.dto';
 import { AdminTransactionsService } from './admin-transactions.service';
-import { CreateEmailTemplateDto, UpdateEmailTemplateDto, PreviewEmailDto, SendEmailDto } from './dto/admin-email.dto';
+import { CreateEmailTemplateDto, UpdateEmailTemplateDto, PreviewEmailDto, SendEmailDto, SendManualEmailDto } from './dto/admin-email.dto';
 import { TierConfigService } from '../subscription/tier-config.service';
 import { UpdateTierConfigDto } from '../subscription/dto/update-tier-config.dto';
 import { SubscriptionTier } from '../business/entities/business.entity';
@@ -143,6 +143,20 @@ export class AdminController {
       subject: dto.subject,
       body: dto.body,
       filters: dto.filters,
+      adminUserId: user.userId,
+    });
+  }
+
+  // Outreach to people who aren't businesses in the system yet — a
+  // manually-typed recipient list instead of an AdminBusinessFilters
+  // query (Val, Sep 2026).
+  @Post('email-templates/send-manual')
+  sendManualEmail(@Body() dto: SendManualEmailDto, @CurrentUser() user: any) {
+    return this.adminEmail.sendManual({
+      templateId: dto.templateId,
+      subject: dto.subject,
+      body: dto.body,
+      emails: dto.emails,
       adminUserId: user.userId,
     });
   }

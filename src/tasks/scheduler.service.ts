@@ -7,6 +7,7 @@ import {
 import { UsageService } from './usage.service';
 import { ExperienceExpiryService } from './experience-expiry.service';
 import { BillingService } from './billing.service';
+import { ListingLifecycleService } from './listing-lifecycle.service';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -22,6 +23,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private usage: UsageService,
     private experienceExpiry: ExperienceExpiryService,
     private billing: BillingService,
+    private listingLifecycle: ListingLifecycleService,
   ) {}
 
   onModuleInit(): void {
@@ -40,6 +42,15 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         name: 'billing-grace-period',
         everyMs: HOUR,
         run: () => this.billing.sweepExpiredGracePeriods(),
+      },
+      {
+        // Hourly is plenty of margin for 7-day thresholds — this isn't
+        // trying to fire reminders at a precise time of day, just
+        // making sure roughly a week (not two, not three) passes
+        // between them.
+        name: 'listing-lifecycle',
+        everyMs: HOUR,
+        run: () => this.listingLifecycle.sweepPendingListings(),
       },
     ];
 

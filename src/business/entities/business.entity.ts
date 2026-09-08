@@ -40,6 +40,12 @@ export enum ReservationPolicy {
   BOTH = 'BOTH',
 }
 
+export enum ListingStatus {
+  PENDING = 'PENDING',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+}
+
 @Entity('businesses')
 export class Business {
   @PrimaryGeneratedColumn('uuid')
@@ -207,6 +213,28 @@ export class Business {
 
   @Column({ type: 'timestamptz', nullable: true })
   gracePeriodEndsAt: Date | null;
+
+  // Discoverability lifecycle — separate from subscriptionStatus above,
+  // which is about billing, not visibility. PENDING from creation until
+  // the first photo is approved (see MediaService.submitForQualityCheck,
+  // which flips this to ACTIVE at that moment); a still-PENDING business
+  // gets reminder emails every 7 days for a month (see
+  // ListingLifecycleService.sweepPendingListings), then INACTIVE after
+  // 30 days with still no photo. Uploading a photo at ANY point —
+  // including after going INACTIVE — flips this back to ACTIVE
+  // immediately; INACTIVE isn't a ban, just a "gone cold" label (Val,
+  // Sep 2026).
+  @Column({ type: 'enum', enum: ListingStatus, default: ListingStatus.PENDING })
+  listingStatus: ListingStatus;
+
+  // Null until the first reminder fires; re-stamped on every reminder
+  // after that. The sweep computes "7 days since whichever is more
+  // recent, this or createdAt" rather than hardcoding calendar days 7/
+  // 14/21/28 from creation — same result, but survives the sweep
+  // running late or being down for a stretch without double-sending or
+  // permanently losing a cycle.
+  @Column({ type: 'timestamptz', nullable: true })
+  lastPendingReminderAt: Date | null;
 
   // Rolling 30-day counters, maintained by the usage-sweep queue job
   @Column({ default: 0 })

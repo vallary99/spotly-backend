@@ -315,7 +315,13 @@ export class BusinessService {
     if (!business) {
       throw new NotFoundException('Business not found.');
     }
-    this.usage.queueEvent(id, 'view');
+    // A business owner browsing their own listing doesn't count as a
+    // real view — only skip if we KNOW this requester is the owner;
+    // anonymous visitors and any other signed-in user still always
+    // count (Val, Sep 2026).
+    if (business.ownerId !== requestingUserId) {
+      this.usage.queueEvent(id, 'view');
+    }
 
     const [withRating] = await this.attachRatingsAndStripMetrics([business], {
       keepMetricsFor: requestingUserId,
