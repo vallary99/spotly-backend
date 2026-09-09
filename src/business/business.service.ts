@@ -246,7 +246,19 @@ export class BusinessService {
           : {}),
       }),
     );
-    await this.users.update(userId, { role: UserRole.BUSINESS_OWNER });
+    // Never downgrades an existing ADMIN to BUSINESS_OWNER — role is a
+    // single, mutually-exclusive field throughout this codebase, and an
+    // unconditional overwrite here is exactly what silently locked an
+    // admin testing account out of the admin panel entirely (Val, Sep
+    // 2026: "I got kicked out of admin role"). Business ownership
+    // itself is tracked via Business.ownerId regardless of this field —
+    // an admin who owns a business still gets full dashboard access
+    // (see AuthService.issueToken, which resolves businessId by
+    // ownership, not by role) — this only controls the ROLE LABEL, and
+    // an admin should stay an admin.
+    if (requestingUser.role !== UserRole.ADMIN) {
+      await this.users.update(userId, { role: UserRole.BUSINESS_OWNER });
+    }
     const owner = await this.users.findOne({ where: { id: userId } });
     if (owner) {
       // A brand new business has zero photos — added in a separate
@@ -411,7 +423,13 @@ export class BusinessService {
       throw new ForbiddenException('You do not own this business.');
     }
     await this.businesses.remove(business);
-    await this.users.update(userId, { role: UserRole.REGISTERED });
+    // Same reasoning as create() above — never touches an existing
+    // ADMIN's role. Only a genuine BUSINESS_OWNER reverts to REGISTERED
+    // here.
+    const owner = await this.users.findOne({ where: { id: userId } });
+    if (owner && owner.role !== UserRole.ADMIN) {
+      await this.users.update(userId, { role: UserRole.REGISTERED });
+    }
     return { deleted: true };
   }
 
