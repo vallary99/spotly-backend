@@ -40,8 +40,13 @@ export class HomeService {
     // window (backed by the usage-sweep job, not a live COUNT).
     const trendingRaw = await baseQb().orderBy('b.profileViews', 'DESC').take(10).getMany();
 
-    // "Popular Near You" — proxy: highest savesCount. Real geo-distance
-    // sorting needs a mapping/geo provider, deferred per BRD Section 11.
+    // "Popular This Month" (frontend label — Val, Sep 2026 renamed it
+    // from "Popular Near You", which never actually filtered by
+    // distance at all) — sorted by savesCount, backed by the same
+    // rolling 30-day usage-sweep window as profileViews above. Real
+    // proximity-based sorting now exists too, but as a genuinely
+    // separate thing — the homepage's "Nearby" toggle, using real
+    // device location (see app/page.tsx's sortByNearby).
     const popularRaw = await baseQb().orderBy('b.savesCount', 'DESC').take(10).getMany();
 
     // "Upcoming Experiences" — joins the hosting business so cards can
