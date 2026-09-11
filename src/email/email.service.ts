@@ -99,8 +99,8 @@ export class EmailService {
     templateId: string | null;
     templateName: string;
     subject: string;
-    businessId: string;
-    businessName: string;
+    businessId: string | null;
+    businessName: string | null;
   }) {
     try {
       await this.sendLogs.save(
@@ -112,7 +112,7 @@ export class EmailService {
           businessName: params.businessName,
           filters: {},
           recipientCount: 1,
-          businessIds: [params.businessId],
+          businessIds: params.businessId ? [params.businessId] : [],
           sentByAdminId: null,
         }),
       );
@@ -123,23 +123,71 @@ export class EmailService {
     }
   }
 
+  // Fired on every regular signup (see AuthService.signup). Was
+  // hardcoded here rather than a real, admin-editable template like
+  // everything else in this file until now — the one inconsistency
+  // Val spotted (Sep 2026) when asking whether new users get a welcome
+  // email at all. Also fixes a hardcoded localhost link found while
+  // migrating it.
   async sendWelcomeEmail(to: string, name: string) {
-    return this.send({
-      to,
-      subject: 'Welcome to Spotly!',
-      html: `
+    const rendered = await this.renderBuiltIn('WELCOME_USER', { name });
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? 'Welcome to Spotly!';
+    const html =
+      rendered?.html ??
+      `
         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
           <h1 style="color: #7A3C2C; font-size: 22px;">Welcome to Spotly, ${escapeHtml(name)}!</h1>
           <p>You're in. Start exploring Nairobi's first 200 businesses — save your favorites,
           leave reviews, and find your next spot.</p>
           <p style="margin-top: 24px;">
-            <a href="${'http://localhost:3001'}" style="background:#C7653A;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;">
+            <a href="https://spotly.co.ke" style="background:#C7653A;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;">
               Start exploring
             </a>
           </p>
         </div>
-      `,
-    });
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({ templateId, templateName: 'Welcome (New User)', subject, businessId: null, businessName: null });
+    return result;
+  }
+
+  // Fired once by ListingLifecycleService.sweepUnderusedGalleries, two
+  // weeks after a Starter business goes live, if it's still under half
+  // its tier's photo allowance (Val, Sep 2026). Starter only — a paid
+  // business already knows why it's paying and doesn't need a usage
+  // nudge.
+  async sendGalleryNudgeEmail(
+    to: string,
+    ownerName: string,
+    businessName: string,
+    businessId: string,
+    currentCount: number,
+    maxCount: number,
+  ) {
+    const vars = { ownerName, businessName, currentCount: String(currentCount), maxCount: String(maxCount) };
+    const rendered = await this.renderBuiltIn('GALLERY_NUDGE', vars);
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? `You've got more room to grow ${businessName}'s listing`;
+    const html =
+      rendered?.html ??
+      `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">Your gallery has more room to grow</h1>
+          <p>Hi ${escapeHtml(ownerName)}, ${escapeHtml(businessName)} is live on Spotly with
+          ${currentCount} of ${maxCount} photos used.</p>
+          <p>Businesses with a fuller gallery tend to get more views and saves — it only takes a
+          couple of minutes to add more from your dashboard.</p>
+          <p style="margin-top: 24px;">
+            <a href="https://spotly.co.ke/dashboard" style="background:#C7653A;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;">
+              Add more photos
+            </a>
+          </p>
+        </div>
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({ templateId, templateName: 'Gallery Nudge', subject, businessId, businessName });
+    return result;
   }
 
   // Admin-editable via the "Welcome Email (needs a photo)" built-in
@@ -455,6 +503,19 @@ export class EmailService {
   queueWelcomeEmail(to: string, name: string): void {
     runInBackground(this.logger, `welcome-user ${to}`, () =>
       this.sendWelcomeEmail(to, name),
+    );
+  }
+
+  queueGalleryNudgeEmail(
+    to: string,
+    ownerName: string,
+    businessName: string,
+    businessId: string,
+    currentCount: number,
+    maxCount: number,
+  ): void {
+    runInBackground(this.logger, `gallery-nudge ${to}`, () =>
+      this.sendGalleryNudgeEmail(to, ownerName, businessName, businessId, currentCount, maxCount),
     );
   }
 

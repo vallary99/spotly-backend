@@ -9,8 +9,8 @@ export class AdminBusinessQueryDto {
   @IsOptional() @IsString() tier?: string;
 
   @IsOptional()
-  @IsIn(['PENDING', 'ACTIVE', 'INACTIVE'])
-  listingStatus?: 'PENDING' | 'ACTIVE' | 'INACTIVE';
+  @IsIn(['PENDING', 'ACTIVE', 'INACTIVE', 'DORMANT'])
+  listingStatus?: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'DORMANT';
 
   @IsOptional()
   @Type(() => Boolean)

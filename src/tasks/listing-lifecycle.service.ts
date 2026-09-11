@@ -1,12 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Business, ListingStatus } from '../business/entities/business.entity';
+import { Business, ListingStatus, SubscriptionTier } from '../business/entities/business.entity';
 import { User } from '../auth/entities/user.entity';
+import { Media, MediaType, MediaStatus } from '../media/entities/media.entity';
 import { EmailService } from '../email/email.service';
 import { SystemConfigService } from '../config/system-config.service';
+import { TierConfigService } from '../subscription/tier-config.service';
 
 const DAY = 24 * 60 * 60 * 1000;
+
+// Fixed, not admin-configurable like the PENDING reminder cadence above
+// — Val gave specific numbers for this one (two weeks, then another
+// two) rather than asking for it to be adjustable. Easy to move onto
+// SystemConfigService later if that changes.
+const GALLERY_NUDGE_AFTER_DAYS = 14;
+const GALLERY_DORMANT_AFTER_DAYS = 14;
+// "Underused" means less than half the tier's photo allowance —
+// arbitrary but reasonable threshold (Val, Sep 2026: "just uploaded one
+// photo... then go MIA").
+const UNDERUSE_THRESHOLD = 0.5;
 
 // Companion to BillingService's grace-period sweep — same shape, same
 // reasoning, different lifecycle: a business that's never uploaded a
@@ -29,8 +42,10 @@ export class ListingLifecycleService {
   constructor(
     @InjectRepository(Business) private businesses: Repository<Business>,
     @InjectRepository(User) private users: Repository<User>,
+    @InjectRepository(Media) private media: Repository<Media>,
     private email: EmailService,
     private systemConfig: SystemConfigService,
+    private tierConfig: TierConfigService,
   ) {}
 
   async sweepPendingListings(): Promise<void> {
@@ -81,6 +96,76 @@ export class ListingLifecycleService {
           this.email.queuePendingDiscoveryEmail(owner.email, owner.name, business.name, business.id);
         }
       }
+    }
+  }
+
+  // Companion sweep for a completely different problem than the one
+  // above — not "invisible," but "quietly underusing the free tier"
+  // (Val, Sep 2026: "the free tier might just have uploaded one photo
+  // for visibility and then go MIA"). Starter tier only; a paid
+  // business already knows why it's paying and doesn't need a usage
+  // nudge. Touches ACTIVE and DORMANT businesses only — PENDING/
+  // INACTIVE ones (no photo at all yet) are entirely the other sweep's
+  // concern.
+  async sweepUnderusedGalleries(): Promise<void> {
+    const candidates = await this.businesses.find({
+      where: [
+        { listingStatus: ListingStatus.ACTIVE, tier: SubscriptionTier.STARTER },
+        { listingStatus: ListingStatus.DORMANT, tier: SubscriptionTier.STARTER },
+      ],
+    });
+    const now = Date.now();
+
+    for (const business of candidates) {
+      if (!business.wentLiveAt) continue; // shouldn't happen for ACTIVE/DORMANT, but be defensive
+
+      const photoCount = await this.media.count({
+        where: { businessId: business.id, type: MediaType.PHOTO, status: MediaStatus.APPROVED },
+      });
+      const limits = await this.tierConfig.getLimits(business.tier);
+      const threshold = Math.ceil(limits.photos * UNDERUSE_THRESHOLD);
+      const isUnderused = photoCount < threshold;
+
+      // Crossed back over the threshold — clean reset back to ACTIVE
+      // regardless of which stage it was in, so a later slow patch
+      // gets its own fresh two-stage cycle rather than picking up
+      // where an old one left off.
+      if (!isUnderused) {
+        if (business.listingStatus !== ListingStatus.ACTIVE || business.galleryNudgeSentAt) {
+          business.listingStatus = ListingStatus.ACTIVE;
+          business.galleryNudgeSentAt = null;
+          await this.businesses.save(business);
+        }
+        continue;
+      }
+
+      if (business.listingStatus === ListingStatus.ACTIVE) {
+        // Stage 1: the one-time nudge, two weeks after going live.
+        if (!business.galleryNudgeSentAt) {
+          const daysSinceLive = (now - business.wentLiveAt.getTime()) / DAY;
+          if (daysSinceLive >= GALLERY_NUDGE_AFTER_DAYS) {
+            business.galleryNudgeSentAt = new Date();
+            await this.businesses.save(business);
+            const owner = await this.users.findOne({ where: { id: business.ownerId } });
+            if (owner) {
+              this.email.queueGalleryNudgeEmail(owner.email, owner.name, business.name, business.id, photoCount, limits.photos);
+            }
+          }
+        } else {
+          // Stage 2: still underused, two weeks after the nudge — DORMANT.
+          const daysSinceNudge = (now - business.galleryNudgeSentAt.getTime()) / DAY;
+          if (daysSinceNudge >= GALLERY_DORMANT_AFTER_DAYS) {
+            business.listingStatus = ListingStatus.DORMANT;
+            await this.businesses.save(business);
+            this.logger.log(`Business ${business.id} marked DORMANT — ${photoCount}/${limits.photos} photos, no growth after nudge.`);
+          }
+        }
+      }
+      // Already DORMANT and still underused: nothing further to do —
+      // no repeating reminders, this was designed as a one-time nudge,
+      // not a recurring cycle (Val, Sep 2026's earlier distinction
+      // between an urgent "you're invisible" case and a gentle,
+      // optional one).
     }
   }
 }

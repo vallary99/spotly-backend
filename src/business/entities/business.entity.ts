@@ -44,6 +44,16 @@ export enum ListingStatus {
   PENDING = 'PENDING',
   ACTIVE = 'ACTIVE',
   INACTIVE = 'INACTIVE',
+  // Still discoverable (has at least one photo, unlike INACTIVE) but
+  // meaningfully underusing its free-tier allowance — e.g. one photo
+  // out of five, months in. A DIFFERENT concept from INACTIVE, which
+  // means zero photos and actually hidden from public search; DORMANT
+  // businesses are fully visible the whole time (Val, Sep 2026: folded
+  // into this same field rather than a separate flag, since none of
+  // these values actually gate visibility anywhere in the codebase —
+  // this field is informational, not enforcement). Paid tiers never
+  // get this — they already know why they're paying (Val).
+  DORMANT = 'DORMANT',
 }
 
 @Entity('businesses')
@@ -247,6 +257,17 @@ export class Business {
   // business.
   @Column({ type: 'timestamptz', nullable: true })
   wentLiveAt: Date | null;
+
+  // Stamped when the one-time "you're underusing your gallery" nudge
+  // fires (see ListingLifecycleService.sweepUnderusedGalleries) — two
+  // weeks after wentLiveAt, if still under half the tier's photo
+  // allowance. If still under half two weeks after THIS timestamp, the
+  // business goes DORMANT. Cleared (along with DORMANT, back to
+  // ACTIVE) the moment the business crosses back over half its
+  // allowance — a slow month doesn't leave a business stuck labeled
+  // DORMANT forever after one later burst of uploads (Val, Sep 2026).
+  @Column({ type: 'timestamptz', nullable: true })
+  galleryNudgeSentAt: Date | null;
 
   // Rolling 30-day counters, maintained by the usage-sweep queue job
   @Column({ default: 0 })

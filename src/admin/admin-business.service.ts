@@ -14,7 +14,7 @@ export interface AdminBusinessFilters {
   neighborhood?: string;
   category?: string;
   tier?: string;
-  listingStatus?: 'PENDING' | 'ACTIVE' | 'INACTIVE';
+  listingStatus?: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'DORMANT';
   isSuspended?: boolean;
   isHiddenGem?: boolean;
   registeredAfter?: string; // ISO date

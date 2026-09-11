@@ -52,6 +52,13 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         everyMs: HOUR,
         run: () => this.listingLifecycle.sweepPendingListings(),
       },
+      {
+        // Same hourly margin reasoning, for the two-week/two-week
+        // gallery-underuse cadence.
+        name: 'gallery-underuse',
+        everyMs: HOUR,
+        run: () => this.listingLifecycle.sweepUnderusedGalleries(),
+      },
     ];
 
     for (const sweep of sweeps) {

@@ -14,6 +14,7 @@ import { ListingLifecycleService } from './listing-lifecycle.service';
 import { SchedulerService } from './scheduler.service';
 import { EmailModule } from '../email/email.module';
 import { SystemConfigModule } from '../config/config.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { SystemConfigModule } from '../config/config.module';
     ]),
     EmailModule,
     SystemConfigModule,
+    SubscriptionModule,
   ],
   providers: [
     ModerationService,
