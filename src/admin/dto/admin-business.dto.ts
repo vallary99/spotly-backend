@@ -22,6 +22,11 @@ export class AdminBusinessQueryDto {
   @IsBoolean()
   isHiddenGem?: boolean;
 
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  firstCohortPremiumTrial?: boolean;
+
   @IsOptional() @IsString() registeredAfter?: string;
   @IsOptional() @IsString() registeredBefore?: string;
 

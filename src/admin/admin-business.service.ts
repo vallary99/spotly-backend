@@ -17,6 +17,13 @@ export interface AdminBusinessFilters {
   listingStatus?: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'DORMANT';
   isSuspended?: boolean;
   isHiddenGem?: boolean;
+  // The first 100 businesses, permanently marked at creation (see
+  // BusinessService.create) — reused here as the "beta partner" flag
+  // (Val, Sep 2026: "mark the first 100 businesses... in a way that we
+  // could give offers to this group") rather than a new field, since
+  // this already means exactly that and was already being correctly
+  // set — it just had no way to be filtered on before now.
+  firstCohortPremiumTrial?: boolean;
   registeredAfter?: string; // ISO date
   registeredBefore?: string;
   minProfileViews?: number;
@@ -54,6 +61,9 @@ export class AdminBusinessService {
     if (filters.listingStatus) qb.andWhere('b."listingStatus" = :ls', { ls: filters.listingStatus });
     if (filters.isSuspended !== undefined) qb.andWhere('b."isSuspended" = :sus', { sus: filters.isSuspended });
     if (filters.isHiddenGem !== undefined) qb.andWhere('b."isHiddenGem" = :hg', { hg: filters.isHiddenGem });
+    if (filters.firstCohortPremiumTrial !== undefined) {
+      qb.andWhere('b."firstCohortPremiumTrial" = :fc', { fc: filters.firstCohortPremiumTrial });
+    }
     if (filters.registeredAfter) qb.andWhere('b."createdAt" >= :after', { after: filters.registeredAfter });
     if (filters.registeredBefore) qb.andWhere('b."createdAt" <= :before', { before: filters.registeredBefore });
     if (filters.minProfileViews != null) qb.andWhere('b."profileViews" >= :mpv', { mpv: filters.minProfileViews });
@@ -88,6 +98,7 @@ export class AdminBusinessService {
         isSuspended: b.isSuspended,
         suspendedUntil: b.suspendedUntil,
         isHiddenGem: b.isHiddenGem,
+        isBetaPartner: b.firstCohortPremiumTrial,
         isGrandfathered: b.isGrandfathered,
         discountPercent: b.discountPercent,
         isTrialing: b.isTrialing,
