@@ -5,9 +5,15 @@ import { Business } from '../business/entities/business.entity';
 import { EmailService } from '../email/email.service';
 
 export interface AdminBusinessFilters {
+  // Matches against business name, case-insensitively — the single
+  // most useful way to jump straight to one specific business (Val,
+  // Sep 2026: "a search field is also definitely needed").
+  search?: string;
   city?: string;
+  neighborhood?: string;
   category?: string;
   tier?: string;
+  listingStatus?: 'PENDING' | 'ACTIVE' | 'INACTIVE';
   isSuspended?: boolean;
   isHiddenGem?: boolean;
   registeredAfter?: string; // ISO date
@@ -35,12 +41,15 @@ export class AdminBusinessService {
   async findAll(filters: AdminBusinessFilters) {
     const qb = this.businesses.createQueryBuilder('b').leftJoinAndSelect('b.owner', 'owner');
 
+    if (filters.search) qb.andWhere('b.name ILIKE :search', { search: `%${filters.search}%` });
     if (filters.city) qb.andWhere('b.city = :city', { city: filters.city });
+    if (filters.neighborhood) qb.andWhere('b.neighborhood = :neighborhood', { neighborhood: filters.neighborhood });
     // `categories` is a text[] column (a business can hold up to 5), so
     // this checks array membership rather than equality — see the same
     // fix in BusinessService.applyListingFilters.
     if (filters.category) qb.andWhere(':category = ANY(b.categories)', { category: filters.category });
     if (filters.tier) qb.andWhere('b.tier = :tier', { tier: filters.tier });
+    if (filters.listingStatus) qb.andWhere('b."listingStatus" = :ls', { ls: filters.listingStatus });
     if (filters.isSuspended !== undefined) qb.andWhere('b."isSuspended" = :sus', { sus: filters.isSuspended });
     if (filters.isHiddenGem !== undefined) qb.andWhere('b."isHiddenGem" = :hg', { hg: filters.isHiddenGem });
     if (filters.registeredAfter) qb.andWhere('b."createdAt" >= :after', { after: filters.registeredAfter });
@@ -70,6 +79,7 @@ export class AdminBusinessService {
         city: b.city,
         neighborhood: b.neighborhood,
         tier: b.tier,
+        listingStatus: b.listingStatus,
         subscriptionStatus: b.subscriptionStatus,
         profileViews: b.profileViews,
         savesCount: b.savesCount,

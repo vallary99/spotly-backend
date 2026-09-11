@@ -2,9 +2,15 @@ import { IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-va
 import { Type } from 'class-transformer';
 
 export class AdminBusinessQueryDto {
+  @IsOptional() @IsString() search?: string;
   @IsOptional() @IsString() city?: string;
+  @IsOptional() @IsString() neighborhood?: string;
   @IsOptional() @IsString() category?: string;
   @IsOptional() @IsString() tier?: string;
+
+  @IsOptional()
+  @IsIn(['PENDING', 'ACTIVE', 'INACTIVE'])
+  listingStatus?: 'PENDING' | 'ACTIVE' | 'INACTIVE';
 
   @IsOptional()
   @Type(() => Boolean)
