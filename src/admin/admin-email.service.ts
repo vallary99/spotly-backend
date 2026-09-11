@@ -171,8 +171,16 @@ export class AdminEmailService {
 
     if (params.templateId) {
       const t = await this.getTemplate(params.templateId);
-      subject = t.subject;
-      body = t.body;
+      // Only falls back to the template's own stored content when the
+      // caller didn't supply its own — otherwise this silently
+      // discarded any edits made in the compose flow (e.g. the
+      // Outreach template's Send flow, which prefills from the
+      // template but is meant to stay editable per-send) and sent the
+      // template's original, unedited copy instead (Val, Sep 2026's
+      // "Outreach should also be a template" — this bug would have
+      // made every outreach send ignore whatever was actually typed).
+      subject = subject ?? t.subject;
+      body = body ?? t.body;
       templateName = t.name;
       templateId = t.id;
     }

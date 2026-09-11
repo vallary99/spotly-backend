@@ -212,31 +212,71 @@ export class EmailService {
     return result;
   }
 
-  // Fired from AdminBusinessService.suspend() when an admin gives an
-  // actual reason — a real policy-violation suspension, not a routine
-  // deactivation (see sendDeactivationEmail below for that lighter
-  // case). Silently does nothing if the built-in template's missing —
-  // an admin action shouldn't throw just because a notification email
-  // couldn't be composed.
-  async sendSuspensionEmail(to: string, ownerName: string, businessName: string, reason: string) {
-    const rendered = await this.renderBuiltIn('SUSPENSION', { ownerName, businessName, reason });
-    if (!rendered) {
-      this.logger.warn(`SUSPENSION built-in template missing — no email sent to ${to}.`);
-      return { simulated: true };
-    }
-    return this.send({ to, ...rendered });
+  // Fired from AdminBusinessService.suspend() — timelined and
+  // indefinite suspensions are both just suspensions (Val, Sep 2026),
+  // so this one template covers both: reason and until are each
+  // rendered as their own optional block, blank when not given, rather
+  // than needing two near-identical templates (SUSPENSION vs the old
+  // DEACTIVATION) to cover a distinction that was really just "was a
+  // reason/end-date supplied," not a different kind of email. Logged
+  // the same way the other automatic sends are, which this one wasn't
+  // doing before despite already being action-triggered.
+  async sendSuspensionEmail(
+    to: string,
+    ownerName: string,
+    businessName: string,
+    businessId: string,
+    reason?: string,
+    until?: Date | null,
+  ) {
+    const reasonBlock = reason
+      ? `<p style="background: #FBEFEA; border-radius: 12px; padding: 12px 16px; margin: 16px 0;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>`
+      : '';
+    const untilBlock = until
+      ? `<p>This is in effect until ${until.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}.</p>`
+      : '';
+    const vars = { ownerName, businessName, reasonBlock, untilBlock };
+    const rendered = await this.renderBuiltIn('SUSPENSION', vars);
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? `Your Spotly listing for ${businessName} has been suspended`;
+    const html =
+      rendered?.html ??
+      `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">${escapeHtml(businessName)} has been suspended</h1>
+          <p>Hi ${escapeHtml(ownerName)}, your listing has been hidden from public browse and search on Spotly.</p>
+          ${reasonBlock}
+          ${untilBlock}
+          <p>You can still see and edit your business profile — this isn't a deletion. If you think this
+          was a mistake or want to resolve it, reply to this email and we'll take a look.</p>
+        </div>
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({ templateId, templateName: 'Business Suspended', subject, businessId, businessName });
+    return result;
   }
 
-  // Fired from AdminBusinessService.suspend() when no reason was given
-  // — the admin dashboard's one-click "Deactivate" action. Same
-  // fallback posture as sendSuspensionEmail.
-  async sendDeactivationEmail(to: string, ownerName: string, businessName: string) {
-    const rendered = await this.renderBuiltIn('DEACTIVATION', { ownerName, businessName });
-    if (!rendered) {
-      this.logger.warn(`DEACTIVATION built-in template missing — no email sent to ${to}.`);
-      return { simulated: true };
-    }
-    return this.send({ to, ...rendered });
+  // Fired from AdminBusinessService.unsuspend() — previously this
+  // action sent no notification at all, so a business owner would only
+  // find out they'd been reinstated by happening to check their
+  // dashboard (Val, Sep 2026: "we should have suspension and
+  // reactivation templates").
+  async sendReactivationEmail(to: string, ownerName: string, businessName: string, businessId: string) {
+    const rendered = await this.renderBuiltIn('REACTIVATION', { ownerName, businessName });
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? `${businessName} is visible on Spotly again`;
+    const html =
+      rendered?.html ??
+      `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">${escapeHtml(businessName)} is back</h1>
+          <p>Hi ${escapeHtml(ownerName)}, your listing is visible again in public browse and search on
+          Spotly — thanks for your patience.</p>
+        </div>
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({ templateId, templateName: 'Business Reactivated', subject, businessId, businessName });
+    return result;
   }
 
   // Fired every 7 days (up to 4 times) by
@@ -272,7 +312,83 @@ export class EmailService {
     return result;
   }
 
-  // resetUrl is built by the caller (AuthService), which is handed the
+  // Fired automatically the moment a discount is actually granted —
+  // whether via the broadcast discount campaign or a single-business
+  // grant (see AdminBusinessService) — rather than needing an admin to
+  // separately, manually broadcast this template afterward. That
+  // manual path used to be the only way this template ever went out,
+  // which meant it was easy to forget, and rendering it against a
+  // business that was never actually granted a discount would show
+  // "0% off" (Val, Sep 2026: "this means the send functionality... will
+  // be useless because these emails are prompted by actions" — right,
+  // which is why the generic Send button is now hidden for this
+  // template in the admin panel; see app/emails/page.tsx).
+  async sendDiscountOfferEmail(
+    to: string,
+    ownerName: string,
+    businessName: string,
+    businessId: string,
+    discountPercent: number,
+    tier: string,
+  ) {
+    const vars = { ownerName, businessName, discountPercent: String(discountPercent), tier };
+    const rendered = await this.renderBuiltIn('DISCOUNT_OFFER', vars);
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? `A discount on your Spotly ${tier} plan`;
+    const html =
+      rendered?.html ??
+      `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">${discountPercent}% off, on us</h1>
+          <p>Hi ${escapeHtml(ownerName)}, as a thank-you, ${escapeHtml(businessName)} is eligible for
+          ${discountPercent}% off the ${escapeHtml(tier)} plan.</p>
+          <p style="margin-top: 24px;">
+            <a href="https://spotly.co.ke/dashboard" style="background:#C7653A;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;">
+              Claim it in your dashboard
+            </a>
+          </p>
+        </div>
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({ templateId, templateName: 'Discount Offer', subject, businessId, businessName });
+    return result;
+  }
+
+  // Same reasoning as sendDiscountOfferEmail above, for the free-trial
+  // equivalent.
+  async sendFreeTrialOfferEmail(
+    to: string,
+    ownerName: string,
+    businessName: string,
+    businessId: string,
+    tier: string,
+    days: number,
+  ) {
+    const vars = { ownerName, businessName, tier, days: String(days) };
+    const rendered = await this.renderBuiltIn('FREE_TRIAL_OFFER', vars);
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? `Try ${tier} free on Spotly`;
+    const html =
+      rendered?.html ??
+      `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">Try ${escapeHtml(tier)}, on the house</h1>
+          <p>Hi ${escapeHtml(ownerName)}, ${escapeHtml(businessName)} is eligible for a free
+          ${days}-day trial of Spotly's ${escapeHtml(tier)} plan — more photos, more videos, and
+          room to host more experiences.</p>
+          <p style="margin-top: 24px;">
+            <a href="https://spotly.co.ke/dashboard" style="background:#C7653A;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;">
+              Start your trial
+            </a>
+          </p>
+        </div>
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({ templateId, templateName: 'Free Trial Offer', subject, businessId, businessName });
+    return result;
+  }
+
+
   // requesting frontend's own origin — the same backend serves both
   // spotly-web and spotly-admin, and each needs the link to land on
   // ITS OWN reset-password page, not a hardcoded one.
@@ -302,6 +418,10 @@ export class EmailService {
     });
   }
 
+  // resetUrl is built by the caller (AuthService), which is handed the
+  // requesting frontend's own origin — the same backend serves both
+  // spotly-web and spotly-admin, and each needs the link to land on
+  // ITS OWN reset-password page, not a hardcoded one.
   async sendPasswordResetEmail(to: string, name: string, resetUrl: string) {
     return this.send({
       to,
@@ -350,21 +470,54 @@ export class EmailService {
     );
   }
 
-  queueSuspensionEmail(to: string, ownerName: string, businessName: string, reason: string): void {
+  queueSuspensionEmail(
+    to: string,
+    ownerName: string,
+    businessName: string,
+    businessId: string,
+    reason?: string,
+    until?: Date | null,
+  ): void {
     runInBackground(this.logger, `suspension ${to}`, () =>
-      this.sendSuspensionEmail(to, ownerName, businessName, reason),
+      this.sendSuspensionEmail(to, ownerName, businessName, businessId, reason, until),
     );
   }
 
-  queueDeactivationEmail(to: string, ownerName: string, businessName: string): void {
-    runInBackground(this.logger, `deactivation ${to}`, () =>
-      this.sendDeactivationEmail(to, ownerName, businessName),
+  queueReactivationEmail(to: string, ownerName: string, businessName: string, businessId: string): void {
+    runInBackground(this.logger, `reactivation ${to}`, () =>
+      this.sendReactivationEmail(to, ownerName, businessName, businessId),
     );
   }
 
   queuePendingDiscoveryEmail(to: string, ownerName: string, businessName: string, businessId: string): void {
     runInBackground(this.logger, `pending-discovery ${to}`, () =>
       this.sendPendingDiscoveryEmail(to, ownerName, businessName, businessId),
+    );
+  }
+
+  queueDiscountOfferEmail(
+    to: string,
+    ownerName: string,
+    businessName: string,
+    businessId: string,
+    discountPercent: number,
+    tier: string,
+  ): void {
+    runInBackground(this.logger, `discount-offer ${to}`, () =>
+      this.sendDiscountOfferEmail(to, ownerName, businessName, businessId, discountPercent, tier),
+    );
+  }
+
+  queueFreeTrialOfferEmail(
+    to: string,
+    ownerName: string,
+    businessName: string,
+    businessId: string,
+    tier: string,
+    days: number,
+  ): void {
+    runInBackground(this.logger, `trial-offer ${to}`, () =>
+      this.sendFreeTrialOfferEmail(to, ownerName, businessName, businessId, tier, days),
     );
   }
 

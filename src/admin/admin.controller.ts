@@ -6,7 +6,7 @@ import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminBusinessService } from './admin-business.service';
 import { AdminModerationService } from './admin-moderation.service';
 import { AdminEmailService } from './admin-email.service';
-import { AdminBusinessQueryDto, SuspendBusinessDto, SetHiddenGemDto, DiscountCampaignDto, TrialCampaignDto, TransactionQueryDto } from './dto/admin-business.dto';
+import { AdminBusinessQueryDto, SuspendBusinessDto, SetHiddenGemDto, DiscountCampaignDto, TrialCampaignDto, GrantDiscountDto, GrantTrialOfferDto, TransactionQueryDto } from './dto/admin-business.dto';
 import { AdminTransactionsService } from './admin-transactions.service';
 import { CreateEmailTemplateDto, UpdateEmailTemplateDto, PreviewEmailDto, SendEmailDto, SendManualEmailDto } from './dto/admin-email.dto';
 import { TierConfigService } from '../subscription/tier-config.service';
@@ -92,6 +92,17 @@ export class AdminController {
   grantTrialOffer(@Body() dto: TrialCampaignDto) {
     const { trialTier, days, ...filters } = dto;
     return this.adminBusiness.grantTrialOffer(filters, trialTier, days);
+  }
+
+  // Single-business equivalents of the two campaign routes above.
+  @Put('businesses/:id/discount')
+  grantDiscountToBusiness(@Param('id') id: string, @Body() dto: GrantDiscountDto) {
+    return this.adminBusiness.grantDiscountToBusiness(id, dto.discountPercent);
+  }
+
+  @Put('businesses/:id/trial-offer')
+  grantTrialOfferToBusiness(@Param('id') id: string, @Body() dto: GrantTrialOfferDto) {
+    return this.adminBusiness.grantTrialOfferToBusiness(id, dto.tier, dto.days);
   }
 
   // --- Moderation queue ---

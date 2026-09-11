@@ -17,8 +17,9 @@ export class EmailTemplate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  // Stable lookup handle for the 5 built-in templates (WELCOME_BUSINESS,
-  // SUSPENSION, DEACTIVATION, DISCOUNT_OFFER, FREE_TRIAL_OFFER) that the
+  // Stable lookup handle for the built-in templates (WELCOME_NEEDS_PHOTO,
+  // WELCOME_BUSINESS, PENDING_DISCOVERY, SUSPENSION, REACTIVATION,
+  // DISCOUNT_OFFER, FREE_TRIAL_OFFER, OUTREACH) that the
   // app looks up by code, not by name — an admin renaming "Business
   // Suspended" to something friendlier shouldn't break the automatic
   // send that happens on suspension. Null for any template an admin

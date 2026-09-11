@@ -41,11 +41,18 @@ export class ListingLifecycleService {
         await this.businesses.save(business);
         const owner = await this.users.findOne({ where: { id: business.ownerId } });
         if (owner) {
-          // Reusing the existing deactivation email rather than writing
-          // new copy — Val's ask was for the STATUS change; the
-          // existing "your listing has been deactivated" message
-          // already covers the actual notification correctly.
-          this.email.queueDeactivationEmail(owner.email, owner.name, business.name);
+          // DEACTIVATION was retired in favor of one merged SUSPENSION
+          // template (Val, Sep 2026) — this is exactly the "no reason,
+          // no end date" indefinite case that template already
+          // handles, now with a real reason given ("no photo") instead
+          // of the previous generic copy.
+          this.email.queueSuspensionEmail(
+            owner.email,
+            owner.name,
+            business.name,
+            business.id,
+            'No photo was uploaded within 30 days of joining.',
+          );
         }
         this.logger.log(`Business ${business.id} marked INACTIVE after ${INACTIVE_AFTER_DAYS} days with no photo.`);
         continue;

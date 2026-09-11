@@ -87,6 +87,26 @@ export class TrialCampaignDto extends AdminBusinessQueryDto {
   days: number;
 }
 
+// Single-business equivalents of the two campaign DTOs above — for
+// rewarding one specific business directly rather than a filtered
+// segment (Val, Sep 2026).
+export class GrantDiscountDto {
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  discountPercent: number;
+}
+
+export class GrantTrialOfferDto {
+  @IsIn(['GROWTH', 'PREMIUM'])
+  tier: 'GROWTH' | 'PREMIUM';
+
+  @IsInt()
+  @Min(1)
+  @Max(90)
+  days: number;
+}
+
 export class TransactionQueryDto {
   @IsOptional() @IsString() status?: string;
   @IsOptional() @IsString() purpose?: string;

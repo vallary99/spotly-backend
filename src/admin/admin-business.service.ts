@@ -91,40 +91,50 @@ export class AdminBusinessService {
   // PUT /admin/businesses/:id/suspend — also used by the admin UI's
   // lighter-weight "Deactivate" action (no reason required there, see
   // SuspendBusinessDto), which is why reason defaults rather than being
-  // required at this layer too. Notifies the owner either way — an
-  // actual explanation for a real suspension, a lighter no-explanation
-  // notice for a routine deactivation — using the matching built-in
-  // template (see EmailService.sendSuspensionEmail/sendDeactivationEmail).
-  // Neither type of email existed before this; suspending/deactivating
-  // silently left the owner with no idea their listing had disappeared.
+  // required at this layer too.
+  // One notification path now, not two — timelined and indefinite
+  // suspensions are both just suspensions (Val, Sep 2026), and
+  // sendSuspensionEmail's reason/until are each optional, rendering as
+  // blank blocks when not given, rather than needing a whole separate
+  // "deactivation" template and an isRealSuspension branch to pick
+  // between them.
   async suspend(id: string, reason: string | undefined, until: string | null) {
     const business = await this.businesses.findOne({ where: { id }, relations: ['owner'] });
     if (!business) throw new NotFoundException('Business not found.');
-    const isRealSuspension = !!reason;
     business.isSuspended = true;
     business.suspensionReason = reason ?? 'Deactivated by admin.';
     business.suspendedUntil = until ? new Date(until) : null;
     const saved = await this.businesses.save(business);
 
     if (business.owner?.email) {
-      if (isRealSuspension) {
-        this.email.queueSuspensionEmail(business.owner.email, business.owner.name, business.name, reason as string);
-      } else {
-        this.email.queueDeactivationEmail(business.owner.email, business.owner.name, business.name);
-      }
+      this.email.queueSuspensionEmail(
+        business.owner.email,
+        business.owner.name,
+        business.name,
+        business.id,
+        reason,
+        business.suspendedUntil,
+      );
     }
 
     return saved;
   }
 
   // PUT /admin/businesses/:id/unsuspend
+  // PUT /admin/businesses/:id/unsuspend — previously sent no
+  // notification at all, so the owner would only learn they'd been
+  // reinstated by happening to check their dashboard (Val, Sep 2026).
   async unsuspend(id: string) {
-    const business = await this.businesses.findOne({ where: { id } });
+    const business = await this.businesses.findOne({ where: { id }, relations: ['owner'] });
     if (!business) throw new NotFoundException('Business not found.');
     business.isSuspended = false;
     business.suspensionReason = null;
     business.suspendedUntil = null;
-    return this.businesses.save(business);
+    const saved = await this.businesses.save(business);
+    if (business.owner?.email) {
+      this.email.queueReactivationEmail(business.owner.email, business.owner.name, business.name, business.id);
+    }
+    return saved;
   }
 
   // PUT /admin/businesses/:id/hidden-gem — fulfills "the system will
@@ -171,6 +181,14 @@ export class AdminBusinessService {
       .set({ discountPercent })
       .whereInIds(ids)
       .execute();
+    // Fires for every affected business, not just once for the
+    // campaign as a whole — each owner gets their own email addressed
+    // to them, same as any other automatic send (Val, Sep 2026).
+    for (const b of eligible) {
+      if (b.ownerEmail) {
+        this.email.queueDiscountOfferEmail(b.ownerEmail, b.ownerName ?? '', b.name, b.id, discountPercent, b.tier);
+      }
+    }
     return { affected: ids.length, excludedStarterCount, businessIds: ids };
   }
 
@@ -194,6 +212,63 @@ export class AdminBusinessService {
       .set({ trialOfferTier: tier as any, trialOfferDays: days })
       .whereInIds(ids)
       .execute();
+    // Same reasoning as applyDiscountCampaign above — one email per
+    // affected business, not one for the campaign as a whole.
+    for (const b of results) {
+      if (b.ownerEmail) {
+        this.email.queueFreeTrialOfferEmail(b.ownerEmail, b.ownerName ?? '', b.name, b.id, tier, days);
+      }
+    }
     return { affected: ids.length, businessIds: ids };
+  }
+
+  // PUT /admin/businesses/:id/discount — the single-business
+  // equivalent of applyDiscountCampaign above, for rewarding one
+  // specific business directly (a partnership negotiated one-on-one,
+  // say) rather than a whole filtered segment (Val, Sep 2026).
+  async grantDiscountToBusiness(id: string, discountPercent: number) {
+    if (discountPercent < 0 || discountPercent > 100) {
+      throw new BadRequestException('discountPercent must be between 0 and 100.');
+    }
+    const business = await this.businesses.findOne({ where: { id }, relations: ['owner'] });
+    if (!business) throw new NotFoundException('Business not found.');
+    if (business.tier === 'STARTER') {
+      throw new BadRequestException('A discount on a free tier is meaningless — grant a trial offer instead.');
+    }
+    business.discountPercent = discountPercent;
+    const saved = await this.businesses.save(business);
+    if (business.owner?.email) {
+      this.email.queueDiscountOfferEmail(
+        business.owner.email,
+        business.owner.name,
+        business.name,
+        business.id,
+        discountPercent,
+        business.tier,
+      );
+    }
+    return saved;
+  }
+
+  // PUT /admin/businesses/:id/trial-offer — single-business equivalent
+  // of grantTrialOffer above. Same two-step design as the campaign
+  // version: this only grants ELIGIBILITY, the owner still has to
+  // click "Start Trial" themselves.
+  async grantTrialOfferToBusiness(id: string, tier: 'GROWTH' | 'PREMIUM', days: number) {
+    if (days < 1 || days > 90) {
+      throw new BadRequestException('days must be between 1 and 90.');
+    }
+    const business = await this.businesses.findOne({ where: { id }, relations: ['owner'] });
+    if (!business) throw new NotFoundException('Business not found.');
+    if (business.tier !== 'STARTER') {
+      throw new BadRequestException('This business is already on a paid tier — a trial offer is only for Starter businesses.');
+    }
+    business.trialOfferTier = tier as any;
+    business.trialOfferDays = days;
+    const saved = await this.businesses.save(business);
+    if (business.owner?.email) {
+      this.email.queueFreeTrialOfferEmail(business.owner.email, business.owner.name, business.name, business.id, tier, days);
+    }
+    return saved;
   }
 }
