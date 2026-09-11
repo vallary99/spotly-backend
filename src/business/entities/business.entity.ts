@@ -236,6 +236,18 @@ export class Business {
   @Column({ type: 'timestamptz', nullable: true })
   lastPendingReminderAt: Date | null;
 
+  // Stamped the moment listingStatus first becomes ACTIVE (see
+  // MediaService.submitForQualityCheck) — distinct from createdAt,
+  // which is just when the business record was made; a business can
+  // sit PENDING for days or weeks before actually going live with its
+  // first approved photo (Val, Sep 2026: "went live on"). Once set,
+  // this never changes again — a later INACTIVE→ACTIVE revival (after
+  // 30 days with no photo) doesn't overwrite the ORIGINAL go-live
+  // moment, since that's still a true historical fact about the
+  // business.
+  @Column({ type: 'timestamptz', nullable: true })
+  wentLiveAt: Date | null;
+
   // Rolling 30-day counters, maintained by the usage-sweep queue job
   @Column({ default: 0 })
   profileViews: number;

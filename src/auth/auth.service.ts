@@ -185,6 +185,14 @@ export class AuthService {
   }
 
   private async issueToken(user: User) {
+    // Stamped here rather than duplicated in login()/oauthLogin()/
+    // verifyEmail() separately — every path that reaches a token being
+    // issued counts as "the user was active," which is exactly what
+    // the admin panel's business detail view wants to show (Val, Sep
+    // 2026: "last logged in or active usage").
+    user.lastLoginAt = new Date();
+    await this.users.save(user);
+
     const business = await this.users.manager.query(
       `SELECT id FROM businesses WHERE "ownerId" = $1 LIMIT 1`,
       [user.id],

@@ -208,6 +208,12 @@ export class MediaService {
       if (business.listingStatus !== ListingStatus.ACTIVE) {
         business.listingStatus = ListingStatus.ACTIVE;
         business.lastPendingReminderAt = null;
+        // Only ever set once — a later INACTIVE→ACTIVE revival
+        // shouldn't overwrite the business's true original go-live
+        // moment (Val, Sep 2026).
+        if (!business.wentLiveAt) {
+          business.wentLiveAt = new Date();
+        }
         await this.businesses.save(business);
       }
       const owner = await this.users.findOne({ where: { id: business.ownerId } });

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Business } from '../business/entities/business.entity';
+import { Review } from '../review/entities/review.entity';
 import { EmailService } from '../email/email.service';
 
 export interface AdminBusinessFilters {
@@ -30,6 +31,7 @@ export interface AdminBusinessFilters {
 export class AdminBusinessService {
   constructor(
     @InjectRepository(Business) private businesses: Repository<Business>,
+    @InjectRepository(Review) private reviews: Repository<Review>,
     private email: EmailService,
   ) {}
 
@@ -280,5 +282,41 @@ export class AdminBusinessService {
       this.email.queueFreeTrialOfferEmail(business.owner.email, business.owner.name, business.name, business.id, tier, days);
     }
     return saved;
+  }
+
+  // GET /admin/businesses/:id — everything the system knows about one
+  // business, for the detail modal that replaced trying to cram every
+  // field into the table itself (Val, Sep 2026). Returns the full
+  // entity plus owner contact/activity info and a reviews summary
+  // (average/count only — the full list is its own paginated endpoint,
+  // AdminReviewService.findForBusiness, opened from a "Manage Reviews"
+  // action rather than crammed in here too).
+  async getDetail(id: string) {
+    const business = await this.businesses.findOne({ where: { id }, relations: ['owner'] });
+    if (!business) throw new NotFoundException('Business not found.');
+
+    const reviewStats = await this.reviews
+      .createQueryBuilder('r')
+      .select('COUNT(*)', 'count')
+      .addSelect('AVG(r.rating)', 'average')
+      .where('r.businessId = :id', { id })
+      .getRawOne<{ count: string; average: string | null }>();
+
+    return {
+      ...business,
+      owner: business.owner
+        ? {
+            id: business.owner.id,
+            name: business.owner.name,
+            email: business.owner.email,
+            lastLoginAt: business.owner.lastLoginAt,
+            reviewsSuspended: business.owner.reviewsSuspended,
+          }
+        : null,
+      reviewsSummary: {
+        count: Number(reviewStats?.count ?? 0),
+        average: reviewStats?.average ? Number(Number(reviewStats.average).toFixed(2)) : 0,
+      },
+    };
   }
 }

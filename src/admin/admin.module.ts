@@ -11,6 +11,7 @@ import { Media } from '../media/entities/media.entity';
 import { EmailTemplate } from '../email/entities/email-template.entity';
 import { EmailSendLog } from '../email/entities/email-send-log.entity';
 import { Payment } from '../payment/entities/payment.entity';
+import { Review } from '../review/entities/review.entity';
 import { AdminController } from './admin.controller';
 import { AdminAnalyticsService } from './admin-analytics.service';
 import { AdminBusinessService } from './admin-business.service';
@@ -18,18 +19,19 @@ import { AdminModerationService } from './admin-moderation.service';
 import { AdminEmailService } from './admin-email.service';
 import { AdminTransactionsService } from './admin-transactions.service';
 import { AdminConfigService } from './admin-config.service';
+import { AdminReviewService } from './admin-review.service';
 import { EmailModule } from '../email/email.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { SystemConfigModule } from '../config/config.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Business, Category, Neighborhood, QuickFilterGroup, User, UsageEvent, ModerationQueueItem, Media, EmailTemplate, EmailSendLog, Payment]),
+    TypeOrmModule.forFeature([Business, Category, Neighborhood, QuickFilterGroup, User, UsageEvent, ModerationQueueItem, Media, EmailTemplate, EmailSendLog, Payment, Review]),
     EmailModule,
     SubscriptionModule,
     SystemConfigModule,
   ],
   controllers: [AdminController],
-  providers: [AdminAnalyticsService, AdminBusinessService, AdminModerationService, AdminEmailService, AdminTransactionsService, AdminConfigService],
+  providers: [AdminAnalyticsService, AdminBusinessService, AdminModerationService, AdminEmailService, AdminTransactionsService, AdminConfigService, AdminReviewService],
 })
 export class AdminModule {}

@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Review } from './entities/review.entity';
 import { Business } from '../business/entities/business.entity';
+import { User } from '../auth/entities/user.entity';
 import { CreateReviewDto } from './dto/review.dto';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class ReviewService {
   constructor(
     @InjectRepository(Review) private reviews: Repository<Review>,
     @InjectRepository(Business) private businesses: Repository<Business>,
+    @InjectRepository(User) private users: Repository<User>,
   ) {}
 
   // POST /reviews — FR-4.3: requires auth (guaranteed by controller: no
@@ -18,6 +20,14 @@ export class ReviewService {
   // error message. A business owner may not review their own business —
   // that's a trust/integrity rule, not an MVP scope cut.
   async create(businessId: string, userId: string, dto: CreateReviewDto) {
+    const user = await this.users.findOne({ where: { id: userId } });
+    // Platform-wide, not scoped to this one business — someone
+    // spamming fake reviews is a bad-faith actor generally, not just a
+    // problem for whichever business they targeted first (Val, Sep
+    // 2026).
+    if (user?.reviewsSuspended) {
+      throw new ForbiddenException('Your account is currently restricted from posting reviews.');
+    }
     const business = await this.businesses.findOne({ where: { id: businessId } });
     if (!business) {
       throw new NotFoundException('Business not found.');

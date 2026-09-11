@@ -15,6 +15,7 @@ import { SubscriptionTier } from '../business/entities/business.entity';
 import { AdminConfigService } from './admin-config.service';
 import { CreateCategoryDto, UpdateCategoryDto, CreateNeighborhoodDto, UpdateNeighborhoodDto, CreateQuickFilterGroupDto, UpdateQuickFilterGroupDto, MapCategoriesToGroupDto } from './dto/config.dto';
 import { SystemConfigService } from '../config/system-config.service';
+import { AdminReviewService } from './admin-review.service';
 
 // Platform-operator-only — meant to be called from the separate
 // spotly-admin app, not the consumer app. Gated by the real ADMIN role
@@ -32,6 +33,7 @@ export class AdminController {
     private tierConfig: TierConfigService,
     private config: AdminConfigService,
     private systemConfig: SystemConfigService,
+    private adminReview: AdminReviewService,
   ) {}
 
   // --- Dashboard ---
@@ -50,6 +52,26 @@ export class AdminController {
   @Get('businesses')
   listBusinesses(@Query() query: AdminBusinessQueryDto) {
     return this.adminBusiness.findAll(query);
+  }
+
+  @Get('businesses/:id')
+  getBusinessDetail(@Param('id') id: string) {
+    return this.adminBusiness.getDetail(id);
+  }
+
+  @Get('businesses/:id/reviews')
+  getBusinessReviews(@Param('id') id: string, @Query('limit') limit?: string, @Query('offset') offset?: string) {
+    return this.adminReview.findForBusiness(id, limit ? Number(limit) : undefined, offset ? Number(offset) : undefined);
+  }
+
+  @Delete('reviews/:id')
+  deleteReview(@Param('id') id: string) {
+    return this.adminReview.deleteReview(id);
+  }
+
+  @Put('users/:id/review-suspension')
+  setReviewSuspension(@Param('id') id: string, @Body('suspended') suspended: boolean) {
+    return this.adminReview.setReviewSuspension(id, suspended);
   }
 
   @Put('businesses/:id/suspend')

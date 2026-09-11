@@ -69,6 +69,24 @@ export class User {
   @Column({ type: 'enum', enum: UserRole, default: UserRole.REGISTERED })
   role: UserRole;
 
+  // Stamped on every token issuance (see AuthService.issueToken) —
+  // login, OAuth, and email verification all count as "active." Null
+  // means never logged in since this was added (Val, Sep 2026).
+  @Column({ type: 'timestamptz', nullable: true })
+  lastLoginAt: Date | null;
+
+  // Restricts posting NEW reviews anywhere on the platform — not a
+  // full account suspension, the user can still browse, save, and use
+  // everything else normally (Val, Sep 2026: "review-posting
+  // restriction only, but they cannot do reviews for any business" —
+  // deliberately platform-wide, not scoped to one business, since
+  // someone spamming fake reviews on one business is a bad-faith
+  // actor generally, not just a problem for that one business).
+  // Existing reviews are untouched; this only blocks new ones (see
+  // ReviewService.create's check).
+  @Column({ default: false })
+  reviewsSuspended: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 
