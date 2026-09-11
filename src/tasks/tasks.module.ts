@@ -13,6 +13,7 @@ import { ExperienceExpiryService } from './experience-expiry.service';
 import { ListingLifecycleService } from './listing-lifecycle.service';
 import { SchedulerService } from './scheduler.service';
 import { EmailModule } from '../email/email.module';
+import { SystemConfigModule } from '../config/config.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { EmailModule } from '../email/email.module';
       User,
     ]),
     EmailModule,
+    SystemConfigModule,
   ],
   providers: [
     ModerationService,

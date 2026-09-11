@@ -4,16 +4,21 @@ import { Repository } from 'typeorm';
 import { Business, ListingStatus } from '../business/entities/business.entity';
 import { User } from '../auth/entities/user.entity';
 import { EmailService } from '../email/email.service';
+import { SystemConfigService } from '../config/system-config.service';
 
 const DAY = 24 * 60 * 60 * 1000;
-const REMINDER_INTERVAL_DAYS = 7;
-const INACTIVE_AFTER_DAYS = 30;
 
 // Companion to BillingService's grace-period sweep — same shape, same
 // reasoning, different lifecycle: a business that's never uploaded a
-// photo isn't discoverable at all, so this nudges them every 7 days for
-// a month, then marks the listing INACTIVE if nothing changed (Val, Sep
-// 2026). Only ever touches PENDING businesses — once a business goes
+// photo isn't discoverable at all, so this nudges them periodically,
+// then marks the listing INACTIVE if nothing changed (Val, Sep 2026).
+// The cadence (how many reminders, how many days apart) used to be
+// hardcoded here; it's now read fresh from SystemConfigService on every
+// sweep, so an admin changing it takes effect immediately for every
+// business currently PENDING — there's no per-business "reminders sent
+// so far" counter to reconcile, since INACTIVE is purely a function of
+// age vs. the CURRENT settings, recomputed each time rather than
+// tracked. Only ever touches PENDING businesses — once a business goes
 // ACTIVE (first photo approved, see MediaService.submitForQualityCheck)
 // or INACTIVE (this sweep), it drops out of this query entirely; the
 // only way back to ACTIVE from either state is uploading a photo.
@@ -25,9 +30,18 @@ export class ListingLifecycleService {
     @InjectRepository(Business) private businesses: Repository<Business>,
     @InjectRepository(User) private users: Repository<User>,
     private email: EmailService,
+    private systemConfig: SystemConfigService,
   ) {}
 
   async sweepPendingListings(): Promise<void> {
+    const reminderIntervalDays = await this.systemConfig.getReminderIntervalDays();
+    const reminderCount = await this.systemConfig.getReminderCount();
+    // Deliberately derived, not a separate setting — going inactive
+    // right after the last scheduled reminder means there's never a
+    // confusing silent gap between "the reminders stopped" and "the
+    // listing went inactive with no further warning."
+    const inactiveAfterDays = reminderIntervalDays * reminderCount;
+
     const pending = await this.businesses.find({
       where: { listingStatus: ListingStatus.PENDING },
     });
@@ -36,7 +50,7 @@ export class ListingLifecycleService {
     for (const business of pending) {
       const ageMs = now - business.createdAt.getTime();
 
-      if (ageMs >= INACTIVE_AFTER_DAYS * DAY) {
+      if (ageMs >= inactiveAfterDays * DAY) {
         business.listingStatus = ListingStatus.INACTIVE;
         await this.businesses.save(business);
         const owner = await this.users.findOne({ where: { id: business.ownerId } });
@@ -51,15 +65,15 @@ export class ListingLifecycleService {
             owner.name,
             business.name,
             business.id,
-            'No photo was uploaded within 30 days of joining.',
+            `No photo was uploaded within ${inactiveAfterDays} days of joining.`,
           );
         }
-        this.logger.log(`Business ${business.id} marked INACTIVE after ${INACTIVE_AFTER_DAYS} days with no photo.`);
+        this.logger.log(`Business ${business.id} marked INACTIVE after ${inactiveAfterDays} days with no photo.`);
         continue;
       }
 
       const sinceLastAction = now - (business.lastPendingReminderAt ?? business.createdAt).getTime();
-      if (sinceLastAction >= REMINDER_INTERVAL_DAYS * DAY) {
+      if (sinceLastAction >= reminderIntervalDays * DAY) {
         business.lastPendingReminderAt = new Date();
         await this.businesses.save(business);
         const owner = await this.users.findOne({ where: { id: business.ownerId } });

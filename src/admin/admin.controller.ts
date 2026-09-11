@@ -292,4 +292,34 @@ export class AdminController {
     const saved = await this.systemConfig.setMaxCategoriesPerBusiness(maxCategories);
     return { maxCategories: saved };
   }
+
+  // Val, Sep 2026: "a configuration for the go live reminder, how many
+  // reminders, and duration between the reminders" — read fresh by
+  // ListingLifecycleService.sweepPendingListings on every run, so a
+  // change here takes effect immediately for every business currently
+  // PENDING.
+  @Get('settings/go-live-reminders')
+  async getGoLiveReminderSettings() {
+    return {
+      reminderIntervalDays: await this.systemConfig.getReminderIntervalDays(),
+      reminderCount: await this.systemConfig.getReminderCount(),
+    };
+  }
+
+  @Put('settings/go-live-reminders')
+  async setGoLiveReminderSettings(
+    @Body('reminderIntervalDays') reminderIntervalDays: number,
+    @Body('reminderCount') reminderCount: number,
+  ) {
+    if (typeof reminderIntervalDays !== 'number' || !Number.isFinite(reminderIntervalDays)) {
+      throw new BadRequestException('reminderIntervalDays must be a number.');
+    }
+    if (typeof reminderCount !== 'number' || !Number.isFinite(reminderCount)) {
+      throw new BadRequestException('reminderCount must be a number.');
+    }
+    return {
+      reminderIntervalDays: await this.systemConfig.setReminderIntervalDays(reminderIntervalDays),
+      reminderCount: await this.systemConfig.setReminderCount(reminderCount),
+    };
+  }
 }
