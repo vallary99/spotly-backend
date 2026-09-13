@@ -15,6 +15,7 @@ import { SchedulerService } from './scheduler.service';
 import { EmailModule } from '../email/email.module';
 import { SystemConfigModule } from '../config/config.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     EmailModule,
     SystemConfigModule,
     SubscriptionModule,
+    PaymentModule,
   ],
   providers: [
     ModerationService,

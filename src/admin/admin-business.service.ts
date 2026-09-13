@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Business } from '../business/entities/business.entity';
+import { Business, BusinessType, ApprovalStatus } from '../business/entities/business.entity';
 import { Review } from '../review/entities/review.entity';
 import { EmailService } from '../email/email.service';
 
@@ -15,6 +15,8 @@ export interface AdminBusinessFilters {
   category?: string;
   tier?: string;
   listingStatus?: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'DORMANT';
+  type?: 'VENUE' | 'EXPERIENCE_HOST' | 'MADE_IN_KENYA';
+  approvalStatus?: 'APPROVED' | 'PENDING' | 'REJECTED';
   isSuspended?: boolean;
   isHiddenGem?: boolean;
   // The first 100 businesses, permanently marked at creation (see
@@ -59,6 +61,8 @@ export class AdminBusinessService {
     if (filters.category) qb.andWhere(':category = ANY(b.categories)', { category: filters.category });
     if (filters.tier) qb.andWhere('b.tier = :tier', { tier: filters.tier });
     if (filters.listingStatus) qb.andWhere('b."listingStatus" = :ls', { ls: filters.listingStatus });
+    if (filters.type) qb.andWhere('b.type = :type', { type: filters.type });
+    if (filters.approvalStatus) qb.andWhere('b."approvalStatus" = :as', { as: filters.approvalStatus });
     if (filters.isSuspended !== undefined) qb.andWhere('b."isSuspended" = :sus', { sus: filters.isSuspended });
     if (filters.isHiddenGem !== undefined) qb.andWhere('b."isHiddenGem" = :hg', { hg: filters.isHiddenGem });
     if (filters.firstCohortPremiumTrial !== undefined) {
@@ -87,7 +91,12 @@ export class AdminBusinessService {
         // still has one "Category" column) even though a business can
         // now hold up to 5 — joined rather than picking just the first
         // so nothing is silently hidden from the admin's view.
-        category: (b.categories && b.categories.length > 0) ? b.categories.join(', ') : '',
+        category: (b.categories && b.categories.length > 0)
+          ? b.categories.slice(0, 2).join(', ') + (b.categories.length > 2 ? ` +${b.categories.length - 2}` : '')
+          : '',
+        type: b.type,
+        approvalStatus: b.approvalStatus,
+        madeInKenyaCategory: b.madeInKenyaCategory,
         city: b.city,
         neighborhood: b.neighborhood,
         tier: b.tier,
@@ -329,5 +338,38 @@ export class AdminBusinessService {
         average: reviewStats?.average ? Number(Number(reviewStats.average).toFixed(2)) : 0,
       },
     };
+  }
+
+  // PUT /admin/businesses/:id/approve-made-in-kenya — the "Business
+  // Approvals" action (Val, Sep 2026). Only meaningful for a
+  // MADE_IN_KENYA business currently PENDING; anything else is a
+  // no-op-shaped error, not a silent success, since approving a Venue
+  // makes no sense.
+  async approveMadeInKenya(id: string) {
+    const business = await this.businesses.findOne({ where: { id }, relations: ['owner'] });
+    if (!business) throw new NotFoundException('Business not found.');
+    if (business.type !== BusinessType.MADE_IN_KENYA) {
+      throw new BadRequestException('Only Made in Kenya businesses go through this approval flow.');
+    }
+    business.approvalStatus = ApprovalStatus.APPROVED;
+    const saved = await this.businesses.save(business);
+    if (business.owner?.email) {
+      this.email.queueMadeInKenyaApprovedEmail(business.owner.email, business.owner.name, business.name, business.id);
+    }
+    return saved;
+  }
+
+  async rejectMadeInKenya(id: string, reason?: string) {
+    const business = await this.businesses.findOne({ where: { id }, relations: ['owner'] });
+    if (!business) throw new NotFoundException('Business not found.');
+    if (business.type !== BusinessType.MADE_IN_KENYA) {
+      throw new BadRequestException('Only Made in Kenya businesses go through this approval flow.');
+    }
+    business.approvalStatus = ApprovalStatus.REJECTED;
+    const saved = await this.businesses.save(business);
+    if (business.owner?.email) {
+      this.email.queueMadeInKenyaRejectedEmail(business.owner.email, business.owner.name, business.name, business.id, reason);
+    }
+    return saved;
   }
 }

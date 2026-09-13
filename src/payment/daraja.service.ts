@@ -20,7 +20,10 @@ export class DarajaService {
         : 'https://sandbox.safaricom.co.ke';
   }
 
-  private isConfigured(): boolean {
+  // Public so PaymentReconciliationService can skip its sweep entirely
+  // in simulated/dev mode, rather than repeatedly attempting — and
+  // failing — real Daraja API calls with no credentials configured.
+  isConfigured(): boolean {
     return Boolean(this.config.get('MPESA_CONSUMER_KEY') && this.config.get('MPESA_CONSUMER_SECRET'));
   }
 
@@ -107,5 +110,37 @@ export class DarajaService {
       // Network failure / Daraja unreachable — not the client's fault.
       throw new ServiceUnavailableException('M-Pesa is temporarily unavailable. Please try again shortly.');
     }
+  }
+
+  // STK Push Query — "especially useful when a callback was not
+  // received" per Safaricom's own docs; this is exactly the case
+  // PaymentReconciliationService exists for. Same password scheme as
+  // initiateStkPush (shortcode + passkey + timestamp), different
+  // endpoint. Result codes worth knowing: '0' = paid successfully;
+  // '1032' = user cancelled the prompt; '1037' = user didn't respond in
+  // time; anything else is some other definitive failure. A thrown
+  // error here (rather than a result code) usually means the
+  // transaction is still being processed — Safaricom returns a
+  // rejection for a query made too soon after the push went out, not a
+  // 200 with a "still pending" status.
+  async queryStkPushStatus(checkoutRequestId: string): Promise<{ resultCode: string; resultDesc: string }> {
+    const shortcode = this.config.get('MPESA_SHORTCODE');
+    const passkey = this.config.get('MPESA_PASSKEY');
+    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+    const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
+    const token = await this.getAccessToken();
+
+    const { data } = await axios.post(
+      `${this.baseUrl}/mpesa/stkpushquery/v1/query`,
+      {
+        BusinessShortCode: shortcode,
+        Password: password,
+        Timestamp: timestamp,
+        CheckoutRequestID: checkoutRequestId,
+      },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    return { resultCode: String(data.ResultCode), resultDesc: data.ResultDesc };
   }
 }

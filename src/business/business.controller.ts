@@ -67,6 +67,13 @@ export class BusinessController {
   }
 
   @Public()
+  @Post(':id/share')
+  recordShare(@Param('id') id: string) {
+    this.service.recordShare(id);
+    return { recorded: true };
+  }
+
+  @Public()
   @Get(':id/experiences/history')
   getHostingHistory(@Param('id') id: string) {
     return this.service.getHostingHistory(id);

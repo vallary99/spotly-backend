@@ -9,10 +9,15 @@ import {
 } from 'typeorm';
 import { Business } from '../../business/entities/business.entity';
 
-// Append-only log backing the profileViews / savesCount aggregates on
-// Business. A scheduled sweep (UsageService.sweepRollingCounters, run
-// hourly by SchedulerService) rolls this table up into the 30-day
-// counters rather than counting live on every page view.
+// Append-only log backing the profileViews / savesCount / sharesCount
+// aggregates on Business. A scheduled sweep
+// (UsageService.sweepRollingCounters, run hourly by SchedulerService)
+// rolls this table up into all-time totals rather than counting live
+// on every page view. Was a rolling 30-day window until Val (Sep 2026)
+// asked for plain lifetime totals "until we introduce an analytics
+// page" — the underlying event log is unchanged either way, so a
+// proper time-windowed analytics view can always be rebuilt from this
+// same table later without needing new tracking.
 @Entity('usage_events')
 @Index(['businessId', 'createdAt'])
 export class UsageEvent {
@@ -29,7 +34,7 @@ export class UsageEvent {
   business: Business;
 
   @Column()
-  type: 'view' | 'save';
+  type: 'view' | 'save' | 'share';
 
   @CreateDateColumn()
   createdAt: Date;

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Payment, PaymentStatus, PaymentPurpose } from './entities/payment.entity';
 import { Business, SubscriptionStatus, SubscriptionTier } from '../business/entities/business.entity';
 import { DarajaService } from './daraja.service';
@@ -36,11 +36,6 @@ export class PaymentService {
     if (business.isTrialing) {
       throw new ForbiddenException(
         'Payments aren\'t available while your free trial is active. This opens up automatically once your trial ends.',
-      );
-    }
-    if (business.isTrialing && !business.firstCohortPremiumTrial) {
-      throw new ForbiddenException(
-        'Payment not allowed during trial period. Complete your trial to unlock premium features.',
       );
     }
 
@@ -113,46 +108,64 @@ export class PaymentService {
     }
 
     const checkoutRequestId = stkCallback.CheckoutRequestID;
-    const resultCode = stkCallback.ResultCode; // 0 = success
+    const resultCode = String(stkCallback.ResultCode); // '0' = success
     const metadata: Array<{ Name: string; Value: any }> =
       stkCallback.CallbackMetadata?.Item ?? [];
     const receipt = metadata.find((i) => i.Name === 'MpesaReceiptNumber')?.Value;
 
-    return this.dataSource.transaction(async (manager) => {
-      const payment = await manager.findOne(Payment, { where: { checkoutRequestId } });
-      if (!payment) {
-        this.logger.warn(`Callback for unknown CheckoutRequestID ${checkoutRequestId}`);
-        return { received: true };
-      }
+    return this.dataSource.transaction((manager) =>
+      this.resolvePayment(manager, checkoutRequestId, resultCode, receipt, body),
+    );
+  }
 
-      // Already terminal (success or failed) — this is a duplicate/retried
-      // callback. No-op and return success so Daraja stops retrying.
-      if (payment.status !== PaymentStatus.PENDING) {
-        this.logger.log(`Duplicate callback for payment ${payment.id}, already ${payment.status}.`);
-        return { received: true, duplicate: true };
-      }
-
-      payment.status = resultCode === 0 ? PaymentStatus.SUCCESS : PaymentStatus.FAILED;
-      payment.mpesaReceiptNumber = receipt;
-      payment.rawCallback = body;
-      await manager.save(payment);
-
-      if (payment.status === PaymentStatus.SUCCESS) {
-        const business = await manager.findOne(Business, { where: { id: payment.businessId } });
-        if (business) {
-          if (payment.purpose === 'SUBSCRIPTION') {
-            // Which tier they're upgrading to is carried by the amount in
-            // this MVP scaffold; a real build would pass an explicit
-            // targetTier on InitiatePaymentDto instead of inferring it.
-            business.subscriptionStatus = SubscriptionStatus.ACTIVE;
-            business.gracePeriodEndsAt = null;
-          }
-          await manager.save(business);
-        }
-      }
-
+  // Shared by handleCallback above and
+  // PaymentReconciliationService.sweepPendingPayments — both are just
+  // different ways of learning a CheckoutRequestID's real outcome (a
+  // pushed callback vs. an actively polled query), and both need the
+  // exact same idempotent, transactional resolution logic once they
+  // know it. Having this split out means the reconciliation sweep can
+  // never drift out of sync with what the callback path actually does.
+  async resolvePayment(
+    manager: EntityManager,
+    checkoutRequestId: string,
+    resultCode: string,
+    receipt: string | undefined,
+    rawPayload: Record<string, any>,
+  ) {
+    const payment = await manager.findOne(Payment, { where: { checkoutRequestId } });
+    if (!payment) {
+      this.logger.warn(`Resolution for unknown CheckoutRequestID ${checkoutRequestId}`);
       return { received: true };
-    });
+    }
+
+    // Already terminal (success or failed) — a duplicate/retried
+    // callback, or a reconciliation sweep re-checking something the
+    // callback already resolved moments earlier. No-op either way.
+    if (payment.status !== PaymentStatus.PENDING) {
+      this.logger.log(`Duplicate resolution for payment ${payment.id}, already ${payment.status}.`);
+      return { received: true, duplicate: true };
+    }
+
+    payment.status = resultCode === '0' ? PaymentStatus.SUCCESS : PaymentStatus.FAILED;
+    payment.mpesaReceiptNumber = receipt ?? null;
+    payment.rawCallback = rawPayload;
+    await manager.save(payment);
+
+    if (payment.status === PaymentStatus.SUCCESS) {
+      const business = await manager.findOne(Business, { where: { id: payment.businessId } });
+      if (business) {
+        if (payment.purpose === 'SUBSCRIPTION') {
+          // Which tier they're upgrading to is carried by the amount in
+          // this MVP scaffold; a real build would pass an explicit
+          // targetTier on InitiatePaymentDto instead of inferring it.
+          business.subscriptionStatus = SubscriptionStatus.ACTIVE;
+          business.gracePeriodEndsAt = null;
+        }
+        await manager.save(business);
+      }
+    }
+
+    return { received: true };
   }
 
   // GET /payments/:id/status — the piece the frontend needs to poll

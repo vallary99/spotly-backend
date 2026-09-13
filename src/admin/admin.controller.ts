@@ -16,6 +16,7 @@ import { AdminConfigService } from './admin-config.service';
 import { CreateCategoryDto, UpdateCategoryDto, CreateNeighborhoodDto, UpdateNeighborhoodDto, CreateQuickFilterGroupDto, UpdateQuickFilterGroupDto, MapCategoriesToGroupDto } from './dto/config.dto';
 import { SystemConfigService } from '../config/system-config.service';
 import { AdminReviewService } from './admin-review.service';
+import { PaymentReconciliationService } from '../payment/payment-reconciliation.service';
 
 // Platform-operator-only — meant to be called from the separate
 // spotly-admin app, not the consumer app. Gated by the real ADMIN role
@@ -34,6 +35,7 @@ export class AdminController {
     private config: AdminConfigService,
     private systemConfig: SystemConfigService,
     private adminReview: AdminReviewService,
+    private paymentReconciliation: PaymentReconciliationService,
   ) {}
 
   // --- Dashboard ---
@@ -62,6 +64,17 @@ export class AdminController {
   @Get('businesses/:id/reviews')
   getBusinessReviews(@Param('id') id: string, @Query('limit') limit?: string, @Query('offset') offset?: string) {
     return this.adminReview.findForBusiness(id, limit ? Number(limit) : undefined, offset ? Number(offset) : undefined);
+  }
+
+  // Business Approvals (Val, Sep 2026) — Made in Kenya only.
+  @Put('businesses/:id/approve-made-in-kenya')
+  approveMadeInKenya(@Param('id') id: string) {
+    return this.adminBusiness.approveMadeInKenya(id);
+  }
+
+  @Put('businesses/:id/reject-made-in-kenya')
+  rejectMadeInKenya(@Param('id') id: string, @Body('reason') reason?: string) {
+    return this.adminBusiness.rejectMadeInKenya(id, reason);
   }
 
   @Delete('reviews/:id')
@@ -203,6 +216,16 @@ export class AdminController {
   @Get('transactions')
   listTransactions(@Query() query: TransactionQueryDto) {
     return this.transactions.findAll(query);
+  }
+
+  // Manual reconciliation — actively asks Daraja for a payment's real
+  // status right now, rather than waiting for the automatic 5-minute
+  // sweep (see PaymentReconciliationService). Useful for support: a
+  // business owner says they paid but their dashboard still shows
+  // Starter — check this before assuming something's actually broken.
+  @Put('transactions/:id/recheck')
+  recheckTransaction(@Param('id') id: string) {
+    return this.paymentReconciliation.reconcileOne(id);
   }
 
   // --- Configuration: Categories ---

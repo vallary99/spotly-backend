@@ -20,6 +20,29 @@ import { Bookmark } from '../../bookmark/entities/bookmark.entity';
 export enum BusinessType {
   VENUE = 'VENUE',
   EXPERIENCE_HOST = 'EXPERIENCE_HOST',
+  // A third onboarding path (Val, Sep 2026) — makers whose "listing" is
+  // really a product catalogue, not a venue or a bookable experience.
+  // Gated by approvalStatus below rather than being immediately live
+  // like the other two types, since the whole point is verifying the
+  // "actually made in Kenya" claim before anything publishes.
+  MADE_IN_KENYA = 'MADE_IN_KENYA',
+}
+
+export enum MadeInKenyaCategory {
+  FASHION = 'FASHION',
+  BEAUTY = 'BEAUTY',
+  ART_CRAFTS = 'ART_CRAFTS',
+  JEWELLERY_ACCESSORIES = 'JEWELLERY_ACCESSORIES',
+  GIFTS_LIFESTYLE = 'GIFTS_LIFESTYLE',
+}
+
+export enum ApprovalStatus {
+  // Default APPROVED for Venue/Experience Host — this gate only
+  // actually matters for MADE_IN_KENYA; the other two types have never
+  // needed manual sign-off before publishing and shouldn't start now.
+  APPROVED = 'APPROVED',
+  PENDING = 'PENDING',
+  REJECTED = 'REJECTED',
 }
 
 export enum SubscriptionTier {
@@ -70,6 +93,20 @@ export class Business {
 
   @Column({ type: 'enum', enum: BusinessType })
   type: BusinessType;
+
+  // Only meaningful when type === MADE_IN_KENYA; null otherwise. One
+  // category per business, not a multi-select (Val, Sep 2026) — each
+  // product's own category is simply whichever one its business has,
+  // no separate per-product field needed.
+  @Column({ type: 'enum', enum: MadeInKenyaCategory, nullable: true })
+  madeInKenyaCategory: MadeInKenyaCategory | null;
+
+  // Drives the new "Business Approvals" admin action — a Made in Kenya
+  // business starts PENDING and can't post products or show publicly
+  // until approved. Venue/Experience Host never touch this beyond
+  // their default.
+  @Column({ type: 'enum', enum: ApprovalStatus, default: ApprovalStatus.APPROVED })
+  approvalStatus: ApprovalStatus;
 
   @Column()
   name: string;
@@ -269,12 +306,19 @@ export class Business {
   @Column({ type: 'timestamptz', nullable: true })
   galleryNudgeSentAt: Date | null;
 
-  // Rolling 30-day counters, maintained by the usage-sweep queue job
+  // Lifetime totals (Val, Sep 2026: "let's have them as total until we
+  // introduce an analytics page" — was a rolling 30-day window before
+  // this), maintained by the usage-sweep queue job. The underlying
+  // usage_events log is untouched either way, so a real time-windowed
+  // view can be rebuilt from it later without new tracking.
   @Column({ default: 0 })
   profileViews: number;
 
   @Column({ default: 0 })
   savesCount: number;
+
+  @Column({ default: 0 })
+  sharesCount: number;
 
   @CreateDateColumn()
   createdAt: Date;

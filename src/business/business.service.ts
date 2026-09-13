@@ -1,7 +1,7 @@
 import { ConflictException, ForbiddenException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Business, SubscriptionTier } from './entities/business.entity';
+import { Business, SubscriptionTier, BusinessType, ApprovalStatus } from './entities/business.entity';
 import { Category } from './entities/category.entity';
 import { Experience } from '../experience/entities/experience.entity';
 import { User, UserRole } from '../auth/entities/user.entity';
@@ -237,6 +237,11 @@ export class BusinessService {
       this.businesses.create({
         ...dto,
         ownerId: userId,
+        // Made in Kenya starts PENDING regardless of cohort status —
+        // the whole point of this type is verifying the claim before
+        // anything publishes (Val, Sep 2026). Venue/Experience Host
+        // both keep the entity default (APPROVED).
+        ...(dto.type === BusinessType.MADE_IN_KENYA ? { approvalStatus: ApprovalStatus.PENDING } : {}),
         ...(isFirstCohort
           ? {
               firstCohortPremiumTrial: true,
@@ -260,14 +265,18 @@ export class BusinessService {
       await this.users.update(userId, { role: UserRole.BUSINESS_OWNER });
     }
     const owner = await this.users.findOne({ where: { id: userId } });
-    if (owner) {
+    if (owner && dto.type !== BusinessType.MADE_IN_KENYA) {
       // A brand new business has zero photos — added in a separate
       // dashboard step, never at creation — so it genuinely isn't
       // visible to public discovery yet. This nudges them to add one;
       // the "you're live!" email now fires later instead, once their
       // first photo is actually approved (see
       // MediaService.submitForQualityCheck), which is the moment
-      // that's actually true (Val, Sep 2026).
+      // that's actually true (Val, Sep 2026). Made in Kenya businesses
+      // skip this entirely — they can't upload photos until approved
+      // in the first place, so nudging them to would be premature; the
+      // approval email (AdminBusinessService.approveMadeInKenya) is
+      // their equivalent moment.
       this.email.queueBusinessNeedsPhotoEmail(owner.email, business.name, business.id);
     }
     return business;
@@ -437,6 +446,17 @@ export class BusinessService {
     this.usage.queueEvent(businessId, 'save');
   }
 
+  // POST /businesses/:id/share — fired by the frontend's share button
+  // (Val, Sep 2026: "add shares on that row"). Public, no auth — anyone
+  // can trigger the native share sheet without being signed in, so
+  // tracking it can't require auth either. Doesn't verify the business
+  // exists first; an invalid id just silently records nothing useful,
+  // which is fine — this is a lightweight engagement counter, not a
+  // security-sensitive write.
+  recordShare(businessId: string) {
+    this.usage.queueEvent(businessId, 'share');
+  }
+
   // Shared by findAll() and HomeService's rails — keeps the "must have
   // an approved photo" + city/neighborhood/category/categories/q
   // filtering logic in exactly one place instead of drifting apart.
@@ -451,9 +471,25 @@ export class BusinessService {
       isHiddenGem?: boolean;
     },
   ) {
-    qb.andWhere(
-      `EXISTS (SELECT 1 FROM media m WHERE m."businessId" = b.id AND m.status = 'APPROVED' AND m.type = 'PHOTO')`,
-    );
+    // A regular business needs just one approved photo to be
+    // discoverable; a Made in Kenya business needs five (Val, Sep
+    // 2026) — a higher bar for a catalogue-style listing than for a
+    // venue/experience card. The subquery counts rather than just
+    // checking existence, and the threshold itself is a CASE on the
+    // business's own type, so this stays a single query rather than
+    // two separate code paths.
+    qb.andWhere(`
+      (SELECT COUNT(*) FROM media m WHERE m."businessId" = b.id AND m.status = 'APPROVED' AND m.type = 'PHOTO')
+      >= CASE WHEN b.type = 'MADE_IN_KENYA' THEN 5 ELSE 1 END
+    `);
+    // A Made in Kenya business awaiting or denied approval never shows
+    // publicly — the approved-photo check above wouldn't even catch
+    // this on its own, since a PENDING business can't have any photos
+    // yet in the first place, but this is the explicit, correct gate
+    // rather than relying on that as an accidental side effect (Val,
+    // Sep 2026). Venue/Experience Host are unaffected — they default
+    // to APPROVED and never touch this status.
+    qb.andWhere(`b."approvalStatus" = 'APPROVED'`);
     // A suspension with no end date stays hidden until an admin lifts it
     // manually; one with an end date in the future stays hidden too, but
     // an expired one is treated as no longer suspended without needing a
@@ -587,6 +623,7 @@ export class BusinessService {
       if (opts.keepMetricsFor !== b.ownerId) {
         delete result.profileViews;
         delete result.savesCount;
+        delete result.sharesCount;
       }
       return result;
     });

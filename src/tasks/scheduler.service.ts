@@ -8,6 +8,7 @@ import { UsageService } from './usage.service';
 import { ExperienceExpiryService } from './experience-expiry.service';
 import { BillingService } from './billing.service';
 import { ListingLifecycleService } from './listing-lifecycle.service';
+import { PaymentReconciliationService } from '../payment/payment-reconciliation.service';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -24,6 +25,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private experienceExpiry: ExperienceExpiryService,
     private billing: BillingService,
     private listingLifecycle: ListingLifecycleService,
+    private paymentReconciliation: PaymentReconciliationService,
   ) {}
 
   onModuleInit(): void {
@@ -58,6 +60,15 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         name: 'gallery-underuse',
         everyMs: HOUR,
         run: () => this.listingLifecycle.sweepUnderusedGalleries(),
+      },
+      {
+        // Every 5 minutes, not hourly like the others — a stuck
+        // payment is far more time-sensitive than a stale listing
+        // status; a business owner mid-checkout shouldn't wait an hour
+        // to find out their payment actually succeeded (Val, Sep 2026).
+        name: 'payment-reconciliation',
+        everyMs: 5 * MINUTE,
+        run: () => this.paymentReconciliation.sweepPendingPayments(),
       },
     ];
 

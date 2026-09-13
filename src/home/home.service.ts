@@ -33,6 +33,13 @@ export class HomeService {
       // as GET /businesses — one shared implementation in BusinessService
       // so the two never drift apart.
       this.businessService.applyListingFilters(qb, params);
+      // Made in Kenya never surfaces here — Spot It and Popular This
+      // Month stay pure entertainment/venue discovery; it gets its own
+      // dedicated rail below instead (Val, Sep 2026: "the other rails
+      // only remain for entertainment discovery"). Still fully
+      // reachable through ordinary search/browse (GET /businesses),
+      // which doesn't call this particular baseQb.
+      qb.andWhere(`b.type != 'MADE_IN_KENYA'`);
       return qb;
     };
 
@@ -69,6 +76,23 @@ export class HomeService {
       const { business, ...rest } = e;
       return { ...withBudgetFallback(rest, business), businessName: business?.name };
     });
+
+    // "Made in Kenya" — one simple combined rail across all five
+    // categories for this first version (Val, Sep 2026), not a
+    // category-by-category browser. Business cards, not product cards —
+    // revised from an earlier product-based version once it turned out
+    // "products replace the business entirely" was the wrong mental
+    // model; clicking through goes to the business's own normal profile
+    // page (with its extra Catalogue tab), exactly like any other
+    // business card. Reuses the same applyListingFilters as
+    // trending/popular (the 5-photo threshold, city/category filters),
+    // just scoped TO this one type instead of excluding it.
+    const madeInKenyaQb = this.businesses.createQueryBuilder('b');
+    this.businessService.applyListingFilters(madeInKenyaQb, params);
+    madeInKenyaQb.andWhere(`b.type = 'MADE_IN_KENYA'`).orderBy('b.createdAt', 'DESC').take(10);
+    const madeInKenyaRaw = await madeInKenyaQb.getMany();
+    const madeInKenya = await this.businessService.attachRatingsAndStripMetrics(madeInKenyaRaw);
+
 
     // Same treatment as GET /businesses: attach real rating aggregates,
     // and strip owner-only profileViews/savesCount from every card here
@@ -142,6 +166,7 @@ export class HomeService {
         trendingThisWeek: trending,
         popularNearYou: popular,
         upcomingExperiences: upcoming,
+        madeInKenya,
       },
     };
   }

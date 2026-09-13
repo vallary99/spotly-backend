@@ -13,6 +13,14 @@ export class AdminBusinessQueryDto {
   listingStatus?: 'PENDING' | 'ACTIVE' | 'INACTIVE' | 'DORMANT';
 
   @IsOptional()
+  @IsIn(['VENUE', 'EXPERIENCE_HOST', 'MADE_IN_KENYA'])
+  type?: 'VENUE' | 'EXPERIENCE_HOST' | 'MADE_IN_KENYA';
+
+  @IsOptional()
+  @IsIn(['APPROVED', 'PENDING', 'REJECTED'])
+  approvalStatus?: 'APPROVED' | 'PENDING' | 'REJECTED';
+
+  @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
   isSuspended?: boolean;

@@ -1,5 +1,5 @@
 import { IsEnum, IsOptional, IsString, IsArray, IsNumber, IsObject, IsBoolean } from 'class-validator';
-import { BusinessType, ReservationPolicy } from '../entities/business.entity';
+import { BusinessType, ReservationPolicy, MadeInKenyaCategory } from '../entities/business.entity';
 
 // Custom validator to limit array size
 function MaxArrayLength(max: number) {
@@ -27,6 +27,10 @@ function MaxArrayLength(max: number) {
 export class CreateBusinessDto {
   @IsEnum(BusinessType)
   type: BusinessType;
+
+  @IsOptional()
+  @IsEnum(MadeInKenyaCategory)
+  madeInKenyaCategory?: MadeInKenyaCategory;
 
   @IsString()
   name: string;

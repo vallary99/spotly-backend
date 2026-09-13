@@ -23,6 +23,7 @@ import { AdminReviewService } from './admin-review.service';
 import { EmailModule } from '../email/email.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { SystemConfigModule } from '../config/config.module';
+import { PaymentModule } from '../payment/payment.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { SystemConfigModule } from '../config/config.module';
     EmailModule,
     SubscriptionModule,
     SystemConfigModule,
+    PaymentModule,
   ],
   controllers: [AdminController],
   providers: [AdminAnalyticsService, AdminBusinessService, AdminModerationService, AdminEmailService, AdminTransactionsService, AdminConfigService, AdminReviewService],

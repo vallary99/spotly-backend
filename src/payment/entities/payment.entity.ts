@@ -68,8 +68,8 @@ export class Payment {
   @Column({ nullable: true })
   merchantRequestId: string;
 
-  @Column({ nullable: true })
-  mpesaReceiptNumber: string;
+  @Column({ type: 'varchar', nullable: true })
+  mpesaReceiptNumber: string | null;
 
   @Column({ type: 'jsonb', nullable: true })
   rawCallback: Record<string, any>;

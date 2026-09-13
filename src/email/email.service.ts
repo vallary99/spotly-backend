@@ -327,6 +327,54 @@ export class EmailService {
     return result;
   }
 
+  // Fired from AdminBusinessService.approveMadeInKenya (Val, Sep 2026).
+  async sendMadeInKenyaApprovedEmail(to: string, ownerName: string, businessName: string, businessId: string) {
+    const rendered = await this.renderBuiltIn('MADE_IN_KENYA_APPROVED', { ownerName, businessName });
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? `You're approved! Start adding ${businessName}'s products`;
+    const html =
+      rendered?.html ??
+      `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">Welcome to Made in Kenya</h1>
+          <p>Hi ${escapeHtml(ownerName)}, ${escapeHtml(businessName)} has been approved. You can now
+          add photos and start posting products to your catalogue.</p>
+          <p style="margin-top: 24px;">
+            <a href="https://spotly.co.ke/dashboard" style="background:#C7653A;color:#fff;padding:12px 24px;border-radius:999px;text-decoration:none;">
+              Go to your dashboard
+            </a>
+          </p>
+        </div>
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({ templateId, templateName: 'Made in Kenya — Approved', subject, businessId, businessName });
+    return result;
+  }
+
+  // Fired from AdminBusinessService.rejectMadeInKenya.
+  async sendMadeInKenyaRejectedEmail(to: string, ownerName: string, businessName: string, businessId: string, reason?: string) {
+    const reasonBlock = reason
+      ? `<p style="background: #FBEFEA; border-radius: 12px; padding: 12px 16px; margin: 16px 0;"><strong>Reason:</strong> ${escapeHtml(reason)}</p>`
+      : '';
+    const rendered = await this.renderBuiltIn('MADE_IN_KENYA_REJECTED', { ownerName, businessName, reasonBlock });
+    const templateId = rendered?.id ?? null;
+    const subject = rendered?.subject ?? 'An update on your Spotly application';
+    const html =
+      rendered?.html ??
+      `
+        <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto; color: #43352F;">
+          <h1 style="color: #7A3C2C; font-size: 22px;">We couldn't approve ${escapeHtml(businessName)} this time</h1>
+          <p>Hi ${escapeHtml(ownerName)}, thanks for applying to list ${escapeHtml(businessName)} on
+          Spotly's Made in Kenya collection. We weren't able to approve it this time.</p>
+          ${reasonBlock}
+          <p>If you have questions, just reply to this email.</p>
+        </div>
+      `;
+    const result = await this.send({ to, subject, html });
+    await this.logAutomaticSend({ templateId, templateName: 'Made in Kenya — Not Approved', subject, businessId, businessName });
+    return result;
+  }
+
   // Fired every 7 days (up to 4 times) by
   // ListingLifecycleService.sweepPendingListings for a business that
   // still hasn't uploaded a photo — logged the same way the two welcome
@@ -547,6 +595,18 @@ export class EmailService {
   queueReactivationEmail(to: string, ownerName: string, businessName: string, businessId: string): void {
     runInBackground(this.logger, `reactivation ${to}`, () =>
       this.sendReactivationEmail(to, ownerName, businessName, businessId),
+    );
+  }
+
+  queueMadeInKenyaApprovedEmail(to: string, ownerName: string, businessName: string, businessId: string): void {
+    runInBackground(this.logger, `mik-approved ${to}`, () =>
+      this.sendMadeInKenyaApprovedEmail(to, ownerName, businessName, businessId),
+    );
+  }
+
+  queueMadeInKenyaRejectedEmail(to: string, ownerName: string, businessName: string, businessId: string, reason?: string): void {
+    runInBackground(this.logger, `mik-rejected ${to}`, () =>
+      this.sendMadeInKenyaRejectedEmail(to, ownerName, businessName, businessId, reason),
     );
   }
 
