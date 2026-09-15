@@ -139,6 +139,7 @@ export class AdminEmailService {
           subject: renderedSubject,
           businessId: business.id,
           businessName: business.name,
+          recipientEmail: business.ownerEmail,
           filters: params.filters as Record<string, unknown>,
           recipientCount: 1,
           businessIds: [business.id],
@@ -197,17 +198,18 @@ export class AdminEmailService {
 
     for (const to of emails) {
       this.email.queueGeneralEmail(to, subject, body);
-      // businessId stays null (no business exists for a prospect) —
-      // businessName holds the raw recipient email instead, so the
-      // history table still shows exactly who each row went to rather
-      // than a blank cell.
+      // businessId AND businessName both stay null here — no business
+      // exists for a prospect. The raw recipient email used to be
+      // stuffed into businessName as a workaround; it belongs in its
+      // own field now (Val, Sep 2026).
       await this.sendLogs.save(
         this.sendLogs.create({
           templateId,
           templateName,
           subject,
           businessId: null,
-          businessName: to,
+          businessName: null,
+          recipientEmail: to,
           filters: {},
           recipientCount: 1,
           businessIds: [],

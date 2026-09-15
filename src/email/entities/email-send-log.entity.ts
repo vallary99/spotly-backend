@@ -37,6 +37,14 @@ export class EmailSendLog {
   @Column({ type: 'varchar', nullable: true })
   businessName: string | null; // denormalized snapshot, same reasoning as templateName
 
+  // The actual destination email for this row (Val, Sep 2026: split
+  // "who this went to" from "which business this concerns" — a manual
+  // outreach send to a prospect who isn't a registered business used
+  // to get stuffed into businessName as a workaround, conflating the
+  // two). Null only on rows that predate this column.
+  @Column({ type: 'varchar', nullable: true })
+  recipientEmail: string | null;
+
   @Column({ type: 'jsonb' })
   filters: Record<string, unknown>; // the AdminBusinessFilters used to select recipients
 

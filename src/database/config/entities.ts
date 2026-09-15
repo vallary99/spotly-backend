@@ -15,6 +15,7 @@ import { EmailTemplate } from '../../email/entities/email-template.entity';
 import { EmailSendLog } from '../../email/entities/email-send-log.entity';
 import { SystemConfig } from '../../config/entities/system-config.entity';
 import { Product, ProductImage } from '../../business/entities/product.entity';
+import { Offer } from '../../business/entities/offer.entity';
 
 // Entities still live beside the module that owns them; this only lists
 // them, so registration never depends on scanning the filesystem.
@@ -55,4 +56,5 @@ export const ENTITIES = [
   SystemConfig,
   Product,
   ProductImage,
+  Offer,
 ];

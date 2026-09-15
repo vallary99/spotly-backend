@@ -3,8 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Business, SubscriptionTier } from '../business/entities/business.entity';
 import { Experience } from '../experience/entities/experience.entity';
+import { Offer } from '../business/entities/offer.entity';
 import { QuickFilterGroup } from '../business/entities/quick-filter-group.entity';
 import { BusinessService } from '../business/business.service';
+import { OfferService } from '../business/offer.service';
 import { withBudgetFallback } from '../experience/experience.util';
 
 @Injectable()
@@ -12,8 +14,10 @@ export class HomeService {
   constructor(
     @InjectRepository(Business) private businesses: Repository<Business>,
     @InjectRepository(Experience) private experiences: Repository<Experience>,
+    @InjectRepository(Offer) private offers: Repository<Offer>,
     @InjectRepository(QuickFilterGroup) private quickFilterGroups: Repository<QuickFilterGroup>,
     private businessService: BusinessService,
+    private offerService: OfferService,
   ) {}
 
   // GET /home — FR-1.1/1.4: single backend endpoint whose response
@@ -93,6 +97,23 @@ export class HomeService {
     const madeInKenyaRaw = await madeInKenyaQb.getMany();
     const madeInKenya = await this.businessService.attachRatingsAndStripMetrics(madeInKenyaRaw);
 
+    // "Offers" — currently running or upcoming deals (Val, Sep 2026),
+    // soonest-starting first. No approved-photo/visibility gate here
+    // beyond the join itself — an offer from a business that isn't yet
+    // publicly discoverable (no approved photo, or a still-pending
+    // Made in Kenya application) shouldn't surface on the homepage
+    // either, so this explicitly joins back to businesses and reuses
+    // the same applyListingFilters used by every other rail.
+    const offersQb = this.offers.createQueryBuilder('o').leftJoinAndSelect('o.business', 'b');
+    this.businessService.applyListingFilters(offersQb as any, params);
+    this.offerService.applyActiveOrUpcomingFilter(offersQb, 'o');
+    offersQb.orderBy('o.startDate', 'ASC').take(10);
+    const offersRaw = await offersQb.getMany();
+    const offers = offersRaw.map((o) => {
+      const { business, ...rest } = o;
+      return { ...rest, businessName: business?.name, businessId: business?.id };
+    });
+
 
     // Same treatment as GET /businesses: attach real rating aggregates,
     // and strip owner-only profileViews/savesCount from every card here
@@ -167,6 +188,7 @@ export class HomeService {
         popularNearYou: popular,
         upcomingExperiences: upcoming,
         madeInKenya,
+        offers,
       },
     };
   }

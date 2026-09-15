@@ -1,4 +1,4 @@
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -39,8 +39,20 @@ export class AuthService {
     this.email.queueWelcomeEmail(user.email, user.name);
     // Fire-and-forget, same as the welcome email above — signup
     // shouldn't wait on (or fail because of) an email provider hiccup.
+    // Not awaited, but the token/expiry assignment inside it happens
+    // synchronously before its own first await, so user.emailVerification
+    // ExpiresAt is already set on this same in-memory object by the time
+    // we read it just below.
     this.sendVerificationEmail(user, dto.verifyUrlBase);
-    return this.issueToken(user);
+    // No token issued here anymore (Val, Sep 2026: "signup, signup
+    // success, notify user of verification sent to email" — not signed
+    // in yet). They're only ever issued a session once they actually
+    // verify (see verifyEmail below) or log in after doing so.
+    return {
+      message: 'Account created — check your email to verify it.',
+      email: user.email,
+      verificationExpiresAt: user.emailVerificationExpiresAt,
+    };
   }
 
   async login(dto: LoginDto) {
@@ -51,6 +63,20 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!valid) {
       throw new UnauthorizedException('Invalid email or password.');
+    }
+    // Checked only AFTER the password is confirmed correct — revealing
+    // "this account isn't verified yet" is safe once we already know
+    // they own the credentials, but doing this check first would leak
+    // account existence to anyone just guessing emails (Val, Sep 2026:
+    // "do not allow login until email is verified"). A distinct
+    // ForbiddenException (403), not UnauthorizedException (401), is
+    // deliberate — the frontend needs to tell these two failure modes
+    // apart to offer a "resend verification" action specifically for
+    // this one. Google-authenticated users are unaffected: they're
+    // stamped emailVerified true at signup (see the OAuth path above)
+    // and never hit this.
+    if (!user.emailVerified) {
+      throw new ForbiddenException('Please verify your email before logging in — check your inbox, or request a new link.');
     }
     return this.issueToken(user);
   }

@@ -101,6 +101,7 @@ export class EmailService {
     subject: string;
     businessId: string | null;
     businessName: string | null;
+    recipientEmail: string | null;
   }) {
     try {
       await this.sendLogs.save(
@@ -110,6 +111,7 @@ export class EmailService {
           subject: params.subject,
           businessId: params.businessId,
           businessName: params.businessName,
+          recipientEmail: params.recipientEmail,
           filters: {},
           recipientCount: 1,
           businessIds: params.businessId ? [params.businessId] : [],
@@ -148,7 +150,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({ templateId, templateName: 'Welcome (New User)', subject, businessId: null, businessName: null });
+    await this.logAutomaticSend({ recipientEmail: to, templateId, templateName: 'Welcome (New User)', subject, businessId: null, businessName: null });
     return result;
   }
 
@@ -186,7 +188,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({ templateId, templateName: 'Gallery Nudge', subject, businessId, businessName });
+    await this.logAutomaticSend({ recipientEmail: to, templateId, templateName: 'Gallery Nudge', subject, businessId, businessName });
     return result;
   }
 
@@ -217,7 +219,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({
+    await this.logAutomaticSend({ recipientEmail: to,
       templateId,
       templateName: 'Welcome Email (needs a photo)',
       subject,
@@ -250,7 +252,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({
+    await this.logAutomaticSend({ recipientEmail: to,
       templateId,
       templateName: 'Welcome Email (business live)',
       subject,
@@ -300,7 +302,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({ templateId, templateName: 'Business Suspended', subject, businessId, businessName });
+    await this.logAutomaticSend({ recipientEmail: to, templateId, templateName: 'Business Suspended', subject, businessId, businessName });
     return result;
   }
 
@@ -323,7 +325,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({ templateId, templateName: 'Business Reactivated', subject, businessId, businessName });
+    await this.logAutomaticSend({ recipientEmail: to, templateId, templateName: 'Business Reactivated', subject, businessId, businessName });
     return result;
   }
 
@@ -347,7 +349,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({ templateId, templateName: 'Made in Kenya — Approved', subject, businessId, businessName });
+    await this.logAutomaticSend({ recipientEmail: to, templateId, templateName: 'Made in Kenya — Approved', subject, businessId, businessName });
     return result;
   }
 
@@ -371,7 +373,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({ templateId, templateName: 'Made in Kenya — Not Approved', subject, businessId, businessName });
+    await this.logAutomaticSend({ recipientEmail: to, templateId, templateName: 'Made in Kenya — Not Approved', subject, businessId, businessName });
     return result;
   }
 
@@ -398,7 +400,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({
+    await this.logAutomaticSend({ recipientEmail: to,
       templateId,
       templateName: 'Pending Discovery Reminder',
       subject,
@@ -446,7 +448,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({ templateId, templateName: 'Discount Offer', subject, businessId, businessName });
+    await this.logAutomaticSend({ recipientEmail: to, templateId, templateName: 'Discount Offer', subject, businessId, businessName });
     return result;
   }
 
@@ -480,7 +482,7 @@ export class EmailService {
         </div>
       `;
     const result = await this.send({ to, subject, html });
-    await this.logAutomaticSend({ templateId, templateName: 'Free Trial Offer', subject, businessId, businessName });
+    await this.logAutomaticSend({ recipientEmail: to, templateId, templateName: 'Free Trial Offer', subject, businessId, businessName });
     return result;
   }
 
