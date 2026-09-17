@@ -1,4 +1,5 @@
-import { ArrayMinSize, IsArray, IsDateString, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { ExperiencePaymentTiming } from '../entities/experience.entity';
 
 // Every field is deliberately required here — a business owner filling
 // this out is expected to provide a complete listing (cover image,
@@ -46,6 +47,21 @@ export class CreateExperienceDto {
   @IsOptional()
   @IsString()
   ticketingLink?: string;
+
+  // Val, Sep 2026 additions — all optional, so this doesn't change
+  // what CreateExperienceDto already required.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  capacity?: number; // omitted/undefined = unlimited
+
+  @IsOptional()
+  @IsEnum(ExperiencePaymentTiming)
+  paymentTiming?: ExperiencePaymentTiming;
+
+  @IsOptional()
+  @IsString()
+  instructions?: string;
 }
 
 // A real class (not just `Partial<CreateExperienceDto>` as a bare type
@@ -70,4 +86,11 @@ export class UpdateExperienceDto {
   @IsOptional() @IsNumber() @Min(0) budgetMin?: number | null;
   @IsOptional() @IsNumber() @Min(0) budgetMax?: number | null;
   @IsOptional() @IsString() ticketingLink?: string;
+  // capacity: number|null (not just number|undefined) so the dashboard
+  // can explicitly clear a previously-set cap back to unlimited —
+  // omitting the key would leave whatever was there untouched instead,
+  // same reasoning as budgetMin/budgetMax below.
+  @IsOptional() @IsInt() @Min(1) capacity?: number | null;
+  @IsOptional() @IsEnum(ExperiencePaymentTiming) paymentTiming?: ExperiencePaymentTiming;
+  @IsOptional() @IsString() instructions?: string;
 }

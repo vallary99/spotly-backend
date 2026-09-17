@@ -10,6 +10,16 @@ import {
 } from 'typeorm';
 import { Business } from '../../business/entities/business.entity';
 
+// Val, Sep 2026: "pay in advance or at the venue or both" — kept in
+// this same file (not extracted like SubscriptionTier had to be) since
+// nothing outside the experience module needs it, so there's no
+// cross-entity circular-import risk to guard against here.
+export enum ExperiencePaymentTiming {
+  ADVANCE = 'ADVANCE',
+  AT_VENUE = 'AT_VENUE',
+  EITHER = 'EITHER',
+}
+
 @Entity('experiences')
 export class Experience {
   @PrimaryGeneratedColumn('uuid')
@@ -60,6 +70,26 @@ export class Experience {
   // walk-in.
   @Column({ type: 'varchar', nullable: true })
   ticketingLink: string | null;
+
+  // Val, Sep 2026: "limited or unlimited attendees" — null means
+  // unlimited; a number is the actual cap. Deliberately not enforced
+  // anywhere yet (no booking/RSVP system exists to count real
+  // attendees against it) — it's informational for now, shown to
+  // whoever's browsing, not a hard server-side limit.
+  @Column({ type: 'int', nullable: true })
+  capacity: number | null;
+
+  // Val, Sep 2026: "pay in advance or at the venue or both."
+  @Column({ type: 'enum', enum: ExperiencePaymentTiming, default: ExperiencePaymentTiming.AT_VENUE })
+  paymentTiming: ExperiencePaymentTiming;
+
+  // Val, Sep 2026: an optional field for anything attendees should
+  // know beyond the core listing — what to bring, parking, dress code,
+  // etc. Shown behind a "More instructions" link on the public side
+  // rather than always inline, since this can run long and isn't
+  // essential to deciding whether to attend in the first place.
+  @Column({ type: 'text', nullable: true })
+  instructions: string | null;
 
   // flipped by the scheduled expiry job once startsAt/endsAt passes,
   // at which point the experience becomes part of Hosting History
