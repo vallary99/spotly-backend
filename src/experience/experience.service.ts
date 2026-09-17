@@ -44,6 +44,67 @@ export class ExperienceService {
   // Account (enforced by RolesGuard at the controller level) and FR-9.5:
   // concurrent-live cap enforced here, server-side, per subscription tier.
   async create(businessId: string, ownerId: string, dto: CreateExperienceDto) {
+    const business = await this.getOwnedBusiness(businessId, ownerId);
+    await this.enforceExperienceSlotLimit(business);
+    return this.experiences.save(
+      this.experiences.create({
+        ...dto,
+        businessId,
+        startsAt: new Date(dto.startsAt),
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
+      } as any),
+    );
+  }
+
+  // POST /businesses/:id/experiences/drafts — reuses UpdateExperienceDto's
+  // shape (everything optional) rather than a new DTO, since that's
+  // exactly what a draft needs: nothing required at all. Deliberately
+  // skips enforceExperienceSlotLimit entirely — a draft isn't "hosted"
+  // yet, so shouldn't count against either the concurrent-live cap or
+  // the monthly allowance (Val, Sep 2026).
+  async saveDraft(businessId: string, ownerId: string, dto: UpdateExperienceDto) {
+    await this.getOwnedBusiness(businessId, ownerId);
+    return this.experiences.save(
+      this.experiences.create({
+        ...dto,
+        businessId,
+        title: dto.title || 'Untitled experience',
+        isDraft: true,
+        startsAt: dto.startsAt ? new Date(dto.startsAt) : null,
+        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
+      } as any),
+    );
+  }
+
+  // PUT /businesses/:id/experiences/:experienceId/publish — the moment a
+  // draft actually becomes a real, live listing. Full validation and the
+  // tier limit both apply here for the first time, exactly as they would
+  // for a direct create() — a draft only defers these checks, it never
+  // skips them.
+  async publishDraft(businessId: string, experienceId: string, ownerId: string) {
+    const business = await this.getOwnedBusiness(businessId, ownerId);
+    const experience = await this.experiences.findOne({ where: { id: experienceId, businessId } });
+    if (!experience) throw new NotFoundException('Experience not found.');
+    if (!experience.isDraft) throw new BadRequestException('This experience is already published.');
+
+    const missing: string[] = [];
+    if (!experience.title || experience.title === 'Untitled experience') missing.push('title');
+    if (!experience.description) missing.push('description');
+    if (!experience.images || experience.images.length === 0) missing.push('at least one photo');
+    if (!experience.startsAt) missing.push('a start date/time');
+    if (!experience.endsAt) missing.push('an end date/time');
+    if (!experience.location) missing.push('a location');
+    if (experience.price == null) missing.push('a price');
+    if (missing.length > 0) {
+      throw new BadRequestException(`This draft is still missing: ${missing.join(', ')}.`);
+    }
+
+    await this.enforceExperienceSlotLimit(business);
+    experience.isDraft = false;
+    return this.experiences.save(experience);
+  }
+
+  private async getOwnedBusiness(businessId: string, ownerId: string): Promise<Business> {
     const business = await this.businesses.findOne({ where: { id: businessId } });
     if (!business) {
       throw new NotFoundException('Business not found.');
@@ -51,14 +112,20 @@ export class ExperienceService {
     if (business.ownerId !== ownerId) {
       throw new ForbiddenException('You do not own this business.');
     }
+    return business;
+  }
 
+  // Extracted from create() so publishDraft() can apply the exact same
+  // check at the moment a draft actually goes live, rather than
+  // duplicating this logic (Val, Sep 2026's draft feature).
+  private async enforceExperienceSlotLimit(business: Business) {
     const limits = await this.tierConfig.getLimits(business.tier);
     if (limits.concurrentExperiences !== null) {
       // Premium: a concurrently-live cap (FR-11.2) — how many
       // not-yet-expired experiences exist right now, regardless of
       // when they were created.
       const liveCount = await this.experiences.count({
-        where: { businessId, isExpired: false },
+        where: { businessId: business.id, isExpired: false, isDraft: false },
       });
       if (liveCount >= limits.concurrentExperiences) {
         throw new ForbiddenException(
@@ -76,29 +143,30 @@ export class ExperienceService {
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
       const monthlyCount = await this.experiences.count({
-        where: { businessId, createdAt: MoreThanOrEqual(startOfMonth) },
+        where: { businessId: business.id, createdAt: MoreThanOrEqual(startOfMonth), isDraft: false },
       });
       if (monthlyCount >= limits.monthlyExperiencesIncluded) {
-        const message =
-          limits.monthlyExperiencesIncluded === 0
-            ? `Your ${business.tier} package doesn't include hosting experiences. Upgrade to Featured or Premium to start hosting.`
-            : `You've used all ${limits.monthlyExperiencesIncluded} experience(s) included in your ${business.tier} package this month. Upgrade to Premium for more room.`;
-        throw new ForbiddenException(message);
+        // A paid add-on credit (see PaymentService.resolvePayment)
+        // covers exactly one experience beyond the included allowance
+        // — consumed here rather than just checked, so it can't be
+        // reused for a second experience without paying again.
+        if (business.paidExperienceAddonsAvailable > 0) {
+          business.paidExperienceAddonsAvailable -= 1;
+          await this.businesses.save(business);
+        } else {
+          const limitsForAddon = await this.tierConfig.getLimits(business.tier);
+          const message =
+            limits.monthlyExperiencesIncluded === 0
+              ? `Your ${business.tier} package doesn't include hosting experiences. Pay a one-time KES ${limitsForAddon.experienceAddonPriceKes} add-on fee to host this one, or upgrade to Featured or Premium for ongoing room.`
+              : `You've used all ${limits.monthlyExperiencesIncluded} experience(s) included in your ${business.tier} package this month. Pay a one-time KES ${limitsForAddon.experienceAddonPriceKes} add-on fee to host one more, or upgrade to Premium for more room.`;
+          throw new ForbiddenException(message);
+        }
       }
     }
-
-    return this.experiences.save(
-      this.experiences.create({
-        ...dto,
-        businessId,
-        startsAt: new Date(dto.startsAt),
-        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
-      } as any),
-    );
   }
 
   async findAll(params: { upcoming?: boolean }) {
-    const qb = this.experiences.createQueryBuilder('e').leftJoinAndSelect('e.business', 'business').where('e.isExpired = false');
+    const qb = this.experiences.createQueryBuilder('e').leftJoinAndSelect('e.business', 'business').where('e.isExpired = false').andWhere('e.isDraft = false');
     if (params.upcoming) qb.andWhere('e.startsAt > NOW()');
     qb.orderBy('e.startsAt', 'ASC').take(50);
     const rows = await qb.getMany();

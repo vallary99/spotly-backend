@@ -221,8 +221,32 @@ export class AdminEmailService {
     return { queued: emails.length };
   }
 
-  // GET /admin/email-sends — the accountability trail.
-  getSendHistory() {
-    return this.sendLogs.find({ order: { createdAt: 'DESC' }, take: 100 });
+  // GET /admin/email-sends — the accountability trail. Filterable and
+  // paginated now (Val, Sep 2026) — this was a flat take(100) with no
+  // way to see anything older or narrow it down, which doesn't scale
+  // as an actual audit trail.
+  async getSendHistory(filters: { templateName?: string; from?: string; to?: string; limit?: number; offset?: number }) {
+    const qb = this.sendLogs.createQueryBuilder('h').orderBy('h.createdAt', 'DESC');
+    if (filters.templateName) qb.andWhere('h.templateName = :t', { t: filters.templateName });
+    if (filters.from) qb.andWhere('h.createdAt >= :from', { from: filters.from });
+    if (filters.to) qb.andWhere('h.createdAt <= :to', { to: filters.to });
+    const [results, total] = await qb
+      .take(filters.limit ?? 50)
+      .skip(filters.offset ?? 0)
+      .getManyAndCount();
+    return { results, total };
+  }
+
+  // GET /admin/email-sends/template-names — populates the filter
+  // dropdown with only templates that have actually been sent, rather
+  // than every template that exists (several never fire manually at
+  // all, so listing them as a filter option would be dead weight).
+  async getSendHistoryTemplateNames() {
+    const rows = await this.sendLogs
+      .createQueryBuilder('h')
+      .select('DISTINCT h.templateName', 'templateName')
+      .orderBy('h.templateName', 'ASC')
+      .getRawMany();
+    return rows.map((r) => r.templateName as string);
   }
 }

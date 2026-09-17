@@ -45,11 +45,8 @@ export enum ApprovalStatus {
   REJECTED = 'REJECTED',
 }
 
-export enum SubscriptionTier {
-  STARTER = 'STARTER',
-  GROWTH = 'GROWTH',
-  PREMIUM = 'PREMIUM',
-}
+export { SubscriptionTier } from './subscription-tier.enum';
+import { SubscriptionTier } from './subscription-tier.enum';
 
 export enum SubscriptionStatus {
   ACTIVE = 'ACTIVE',
@@ -319,6 +316,16 @@ export class Business {
 
   @Column({ default: 0 })
   sharesCount: number;
+
+  // Incremented when an EXPERIENCE_ADDON payment succeeds, decremented
+  // when ExperienceService.create() consumes one to allow an experience
+  // beyond the tier's included allowance (Val, Sep 2026) — completes a
+  // feature that was already fully priced in tier config
+  // (experienceAddonPriceKes) but never actually wired to anything,
+  // which is why a Starter-tier Experience Host had no way to create
+  // an experience at all, paid or not.
+  @Column({ default: 0 })
+  paidExperienceAddonsAvailable: number;
 
   @CreateDateColumn()
   createdAt: Date;

@@ -35,8 +35,8 @@ export class Experience {
   images: string[];
 
   @Index()
-  @Column({ type: 'timestamptz' })
-  startsAt: Date;
+  @Column({ type: 'timestamptz', nullable: true })
+  startsAt: Date | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   endsAt: Date | null;
@@ -65,6 +65,18 @@ export class Experience {
   // at which point the experience becomes part of Hosting History
   @Column({ default: false })
   isExpired: boolean;
+
+  // Val, Sep 2026: "add option to save experience draft" — a genuine
+  // reversal of this entity's earlier design ("every field deliberately
+  // required... not a partial one filled in later," see
+  // CreateExperienceDto). A draft skips that validation and the tier
+  // concurrent/monthly limit entirely (it isn't "hosted" yet, so
+  // shouldn't count against either), and never appears in any public
+  // query — only in the owner's own management view, until they
+  // explicitly publish it (ExperienceService.publishDraft), at which
+  // point full validation and the tier limit both apply for real.
+  @Column({ default: false })
+  isDraft: boolean;
 
   @CreateDateColumn()
   createdAt: Date;

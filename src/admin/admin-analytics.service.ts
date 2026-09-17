@@ -1,9 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Business } from '../business/entities/business.entity';
+import { Repository, LessThan } from 'typeorm';
+import { Business, BusinessType, ApprovalStatus } from '../business/entities/business.entity';
 import { User, UserRole } from '../auth/entities/user.entity';
 import { UsageEvent } from '../tasks/entities/usage-event.entity';
+import { ModerationQueueItem } from '../tasks/entities/moderation-queue-item.entity';
+import { Payment, PaymentStatus } from '../payment/entities/payment.entity';
+
+// Matches PaymentReconciliationService's own definition of "stuck" —
+// a PENDING payment older than this has already had every automatic
+// retry the sweep will give it and needs a human to look (Val, Sep
+// 2026: dashboard should say what needs attention, not just totals).
+const STUCK_PAYMENT_AGE_HOURS = 24;
 
 @Injectable()
 export class AdminAnalyticsService {
@@ -11,11 +19,13 @@ export class AdminAnalyticsService {
     @InjectRepository(Business) private businesses: Repository<Business>,
     @InjectRepository(User) private users: Repository<User>,
     @InjectRepository(UsageEvent) private usageEvents: Repository<UsageEvent>,
+    @InjectRepository(ModerationQueueItem) private moderationQueue: Repository<ModerationQueueItem>,
+    @InjectRepository(Payment) private payments: Repository<Payment>,
   ) {}
 
   // GET /admin/analytics/summary — the top-of-dashboard counts.
   async getSummary() {
-    const [totalBusinesses, totalUsers, activeBusinesses, suspendedBusinesses, tierCounts] =
+    const [totalBusinesses, totalUsers, activeBusinesses, suspendedBusinesses, tierCounts, pendingMadeInKenya, moderationQueueCount, stuckPayments] =
       await Promise.all([
         this.businesses.count(),
         this.users.count({ where: { role: UserRole.REGISTERED } }), // BUSINESS_OWNER counted separately below, ADMIN excluded from "users"
@@ -35,6 +45,11 @@ export class AdminAnalyticsService {
           .addSelect('COUNT(*)', 'count')
           .groupBy('b.tier')
           .getRawMany(),
+        this.businesses.count({ where: { type: BusinessType.MADE_IN_KENYA, approvalStatus: ApprovalStatus.PENDING } }),
+        this.moderationQueue.count({ where: { resolved: false } }),
+        this.payments.count({
+          where: { status: PaymentStatus.PENDING, createdAt: LessThan(new Date(Date.now() - STUCK_PAYMENT_AGE_HOURS * 60 * 60 * 1000)) },
+        }),
       ]);
     const businessOwners = await this.users.count({ where: { role: UserRole.BUSINESS_OWNER } });
 
@@ -46,6 +61,9 @@ export class AdminAnalyticsService {
       activeBusinesses,
       suspendedBusinesses,
       tierBreakdown: Object.fromEntries(tierCounts.map((r) => [r.tier, Number(r.count)])),
+      // "Needs your attention" (Val, Sep 2026) — every count here links
+      // to the specific page that resolves it.
+      needsAttention: { pendingMadeInKenya, moderationQueueCount, stuckPayments },
     };
   }
 

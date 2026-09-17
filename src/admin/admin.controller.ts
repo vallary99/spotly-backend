@@ -208,8 +208,25 @@ export class AdminController {
   }
 
   @Get('email-sends')
-  getEmailSendHistory() {
-    return this.adminEmail.getSendHistory();
+  getEmailSendHistory(
+    @Query('templateName') templateName?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.adminEmail.getSendHistory({
+      templateName,
+      from,
+      to,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+  }
+
+  @Get('email-sends/template-names')
+  getEmailSendHistoryTemplateNames() {
+    return this.adminEmail.getSendHistoryTemplateNames();
   }
 
   // --- Transactions ---

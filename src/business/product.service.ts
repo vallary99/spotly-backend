@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product, ProductImage } from './entities/product.entity';
@@ -47,6 +47,43 @@ export class ProductService {
     return this.products.save(this.products.create({ ...dto, businessId }));
   }
 
+  // POST /businesses/:id/products/drafts — Val, Sep 2026. Only `name`
+  // required (falls back to a placeholder even if blank) — everything
+  // else, including price, can be filled in later. Still requires an
+  // APPROVED Made in Kenya business, same as any other write here — a
+  // still-pending application can't start drafting products either,
+  // consistent with the original "products only after approval" design.
+  async saveDraft(businessId: string, ownerId: string, dto: Partial<CreateProductDto>) {
+    await this.assertCanManageProducts(businessId, ownerId);
+    return this.products.save(
+      this.products.create({
+        ...dto,
+        name: dto.name || 'Untitled product',
+        businessId,
+        isDraft: true,
+      }),
+    );
+  }
+
+  // PUT /businesses/:id/products/:productId/publish — the moment a
+  // draft actually becomes visible in the Catalogue tab and shareable.
+  async publishDraft(businessId: string, productId: string, ownerId: string) {
+    await this.assertCanManageProducts(businessId, ownerId);
+    const product = await this.products.findOne({ where: { id: productId, businessId } });
+    if (!product) throw new NotFoundException('Product not found.');
+    if (!product.isDraft) throw new BadRequestException('This product is already published.');
+
+    const missing: string[] = [];
+    if (!product.name || product.name === 'Untitled product') missing.push('name');
+    if (product.price == null) missing.push('a price');
+    if (missing.length > 0) {
+      throw new BadRequestException(`This draft is still missing: ${missing.join(', ')}.`);
+    }
+
+    product.isDraft = false;
+    return this.products.save(product);
+  }
+
   async update(businessId: string, productId: string, ownerId: string, dto: UpdateProductDto) {
     await this.assertCanManageProducts(businessId, ownerId);
     const product = await this.products.findOne({ where: { id: productId, businessId } });
@@ -66,11 +103,31 @@ export class ProductService {
     return { deleted: true };
   }
 
-  // GET /businesses/:id/products — used by both the owner's own
-  // dashboard (shown regardless of approval, so they can see what
-  // they've already built even mid-review) and, for an APPROVED
-  // business, the business's own public profile.
+  // GET /businesses/:id/products — public. Drafts never appear here
+  // (Val, Sep 2026's draft feature), and never for a business that
+  // isn't APPROVED — same bar findOnePublic already applies to a
+  // single product, now applied consistently to the list too (this
+  // previously had neither check, serving both the public Catalogue
+  // tab and the owner's dashboard identically).
   async findForBusiness(businessId: string) {
+    const business = await this.businesses.findOne({ where: { id: businessId } });
+    if (!business || business.approvalStatus !== ApprovalStatus.APPROVED) {
+      return [];
+    }
+    return this.products.find({
+      where: { businessId, isDraft: false },
+      relations: ['images'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  // GET /businesses/:id/products/manage — owner-only, every product
+  // regardless of draft/approval status, for the dashboard's Catalogue
+  // tab.
+  async findAllForOwner(businessId: string, ownerId: string) {
+    const business = await this.businesses.findOne({ where: { id: businessId } });
+    if (!business) throw new NotFoundException('Business not found.');
+    if (business.ownerId !== ownerId) throw new ForbiddenException('You do not own this business.');
     return this.products.find({
       where: { businessId },
       relations: ['images'],

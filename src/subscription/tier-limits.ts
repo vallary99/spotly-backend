@@ -26,7 +26,7 @@ export const TIER_LIMITS: Record<SubscriptionTier, TierLimit> = {
     photos: 5,
     videos: 1,
     videoMaxSeconds: 15,
-    concurrentExperiences: 0, // pay-per-event add-on only
+    concurrentExperiences: null, // governed by monthlyExperiencesIncluded (0) + per-event add-on — see ExperienceService.create. Was literally 0 before, which routed into the WRONG branch there (a hard concurrent-live cap of zero, with no addon check at all) instead of the monthly-allowance branch that actually knows how to consult a paid add-on credit (Val, Sep 2026 — this is why a Starter Experience Host had no way to create an experience, paid or not).
     monthlyExperiencesIncluded: 0,
     extraFeatures: [],
     experienceAddonPriceKes: 500, // no subscription revenue at all on this tier, so the add-on carries more of the real cost

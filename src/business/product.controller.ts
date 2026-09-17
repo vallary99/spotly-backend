@@ -13,9 +13,24 @@ export class BusinessProductController {
     return this.service.findForBusiness(businessId);
   }
 
+  @Get('manage')
+  findAllForOwner(@CurrentUser() user: any, @Param('id') businessId: string) {
+    return this.service.findAllForOwner(businessId, user.userId);
+  }
+
   @Post()
   create(@CurrentUser() user: any, @Param('id') businessId: string, @Body() dto: CreateProductDto) {
     return this.service.create(businessId, user.userId, dto);
+  }
+
+  @Post('drafts')
+  saveDraft(@CurrentUser() user: any, @Param('id') businessId: string, @Body() dto: Partial<CreateProductDto>) {
+    return this.service.saveDraft(businessId, user.userId, dto);
+  }
+
+  @Put(':productId/publish')
+  publishDraft(@CurrentUser() user: any, @Param('id') businessId: string, @Param('productId') productId: string) {
+    return this.service.publishDraft(businessId, productId, user.userId);
   }
 
   @Put(':productId')

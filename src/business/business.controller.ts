@@ -79,6 +79,11 @@ export class BusinessController {
     return this.service.getHostingHistory(id);
   }
 
+  @Get(':id/experiences/history/manage')
+  getHostingHistoryForOwner(@CurrentUser() user: any, @Param('id') id: string) {
+    return this.service.getHostingHistoryForOwner(id, user.userId);
+  }
+
   @Put(':id')
   update(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: UpdateBusinessDto) {
     return this.service.update(id, user.userId, dto);

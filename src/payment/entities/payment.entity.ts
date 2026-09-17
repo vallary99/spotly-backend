@@ -9,6 +9,9 @@ import {
   Index,
 } from 'typeorm';
 import { Business } from '../../business/entities/business.entity';
+// From the standalone file, not business.entity.ts — see that file's
+// own comment for why (a circular-import bug this exact import caused).
+import { SubscriptionTier } from '../../business/entities/subscription-tier.enum';
 
 export enum PaymentProvider {
   MPESA = 'MPESA',
@@ -49,6 +52,17 @@ export class Payment {
 
   @Column({ type: 'enum', enum: PaymentPurpose })
   purpose: PaymentPurpose;
+
+  // Only meaningful for SUBSCRIPTION purpose — which tier this payment
+  // is upgrading to. Was never persisted at all before (Val, Sep
+  // 2026's investigation surfaced this) — targetTier existed on the
+  // initiate DTO to compute the correct price, but nothing carried it
+  // through to resolution, so a successful payment updated
+  // subscriptionStatus/gracePeriodEndsAt but never actually changed
+  // business.tier. A paying business could complete a real M-Pesa
+  // charge and never receive the upgrade they paid for.
+  @Column({ type: 'enum', enum: SubscriptionTier, nullable: true })
+  targetTier: SubscriptionTier | null;
 
   @Column({ type: 'float' })
   amount: number;

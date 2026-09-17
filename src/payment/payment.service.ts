@@ -81,6 +81,10 @@ export class PaymentService {
         businessId: dto.businessId,
         purpose: dto.purpose,
         amount,
+        // Persisted now so resolvePayment can actually apply it on
+        // success — previously computed here just to price the charge,
+        // then lost (Val, Sep 2026's investigation).
+        targetTier: dto.purpose === PaymentPurpose.SUBSCRIPTION ? dto.targetTier! : null,
         status: PaymentStatus.PENDING,
         checkoutRequestId: stk.checkoutRequestId,
         merchantRequestId: stk.merchantRequestId,
@@ -154,12 +158,25 @@ export class PaymentService {
     if (payment.status === PaymentStatus.SUCCESS) {
       const business = await manager.findOne(Business, { where: { id: payment.businessId } });
       if (business) {
-        if (payment.purpose === 'SUBSCRIPTION') {
-          // Which tier they're upgrading to is carried by the amount in
-          // this MVP scaffold; a real build would pass an explicit
-          // targetTier on InitiatePaymentDto instead of inferring it.
+        if (payment.purpose === PaymentPurpose.SUBSCRIPTION) {
+          // This used to only touch subscriptionStatus/gracePeriodEndsAt
+          // and never actually changed business.tier — a real charge
+          // completed with no corresponding upgrade ever applied (Val,
+          // Sep 2026's investigation). targetTier is now persisted on
+          // the payment itself (see initiate()) specifically so this
+          // can happen.
+          if (payment.targetTier) {
+            business.tier = payment.targetTier;
+          }
           business.subscriptionStatus = SubscriptionStatus.ACTIVE;
           business.gracePeriodEndsAt = null;
+        } else if (payment.purpose === PaymentPurpose.EXPERIENCE_ADDON) {
+          // Grants one experience beyond the tier's included allowance
+          // — consumed by ExperienceService.create() when that
+          // allowance is exhausted. Completes a feature that was fully
+          // priced (experienceAddonPriceKes) but never wired to
+          // anything before this.
+          business.paidExperienceAddonsAvailable += 1;
         }
         await manager.save(business);
       }

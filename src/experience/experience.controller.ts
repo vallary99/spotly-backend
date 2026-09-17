@@ -35,6 +35,25 @@ export class ExperienceController {
     return this.service.create(businessId, user.userId, dto);
   }
 
+  // POST /businesses/:id/experiences/drafts — Val, Sep 2026. Reuses
+  // UpdateExperienceDto (everything optional) rather than a dedicated
+  // DTO, since that's exactly what a draft needs.
+  @Roles(UserRole.BUSINESS_OWNER, UserRole.ADMIN)
+  @Post('businesses/:id/experiences/drafts')
+  saveDraft(@CurrentUser() user: any, @Param('id') businessId: string, @Body() dto: UpdateExperienceDto) {
+    return this.service.saveDraft(businessId, user.userId, dto);
+  }
+
+  @Roles(UserRole.BUSINESS_OWNER, UserRole.ADMIN)
+  @Put('businesses/:id/experiences/:experienceId/publish')
+  publishDraft(
+    @CurrentUser() user: any,
+    @Param('id') businessId: string,
+    @Param('experienceId') experienceId: string,
+  ) {
+    return this.service.publishDraft(businessId, experienceId, user.userId);
+  }
+
   @Public()
   @Get('experiences')
   findAll(@Query('upcoming') upcoming?: string) {

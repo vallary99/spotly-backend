@@ -39,11 +39,20 @@ export class Product {
   @Column({ type: 'text', nullable: true })
   description: string | null;
 
-  @Column({ type: 'float' })
-  price: number;
+  @Column({ type: 'float', nullable: true })
+  price: number | null;
 
   @Column({ default: 'KES' })
   currency: string;
+
+  // Val, Sep 2026: "add option to save... catalogue drafts" — same
+  // reasoning as Experience.isDraft (see that entity's own comment). A
+  // draft skips full validation and never appears in the public
+  // Catalogue tab or its share links, only in the owner's own
+  // management view, until explicitly published
+  // (ProductService.publishDraft).
+  @Column({ default: false })
+  isDraft: boolean;
 
   @OneToMany(() => ProductImage, (image) => image.product)
   images: ProductImage[];

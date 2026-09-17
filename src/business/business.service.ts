@@ -352,10 +352,32 @@ export class BusinessService {
 
   // GET /businesses/:id/experiences/history — permanent Hosting History
   // (FR-9.4), regardless of expiry state.
+  // GET /businesses/:id/experiences/history — public. Drafts never
+  // appear here (Val, Sep 2026's draft feature) — this is what the
+  // public business page's Upcoming/Past Experiences tabs read from.
   async getHostingHistory(id: string) {
     const business = await this.businesses.findOne({ where: { id } });
     if (!business) {
       throw new NotFoundException('Business not found.');
+    }
+    const rows = await this.experiences.find({
+      where: { businessId: id, isDraft: false },
+      order: { startsAt: 'DESC' },
+    });
+    return rows.map((e) => withBudgetFallback(e, business));
+  }
+
+  // GET /businesses/:id/experiences/history/manage — owner-only,
+  // includes drafts. What ExperienceManager (the dashboard) reads from
+  // instead, so an owner can see and finish a draft they started
+  // earlier.
+  async getHostingHistoryForOwner(id: string, ownerId: string) {
+    const business = await this.businesses.findOne({ where: { id } });
+    if (!business) {
+      throw new NotFoundException('Business not found.');
+    }
+    if (business.ownerId !== ownerId) {
+      throw new ForbiddenException('You do not own this business.');
     }
     const rows = await this.experiences.find({
       where: { businessId: id },
@@ -471,16 +493,25 @@ export class BusinessService {
       isHiddenGem?: boolean;
     },
   ) {
-    // A regular business needs just one approved photo to be
-    // discoverable; a Made in Kenya business needs five (Val, Sep
-    // 2026) — a higher bar for a catalogue-style listing than for a
-    // venue/experience card. The subquery counts rather than just
-    // checking existence, and the threshold itself is a CASE on the
-    // business's own type, so this stays a single query rather than
-    // two separate code paths.
+    // Discoverability is judged differently per business type (Val,
+    // Sep 2026): a Venue needs one approved business photo; a Made in
+    // Kenya catalogue needs five, a higher bar than a venue/experience
+    // card; an Experience Host needs neither — it gets discovered
+    // through its experience listings instead ("they get discovered
+    // through their events listing"), so the bar is at least one
+    // experience that itself has at least one photo. Experience images
+    // aren't quality-gated/approved the way business media is (see the
+    // Experience entity — just a plain images array), so "has one" is
+    // the right bar here, not "has one approved one."
     qb.andWhere(`
-      (SELECT COUNT(*) FROM media m WHERE m."businessId" = b.id AND m.status = 'APPROVED' AND m.type = 'PHOTO')
-      >= CASE WHEN b.type = 'MADE_IN_KENYA' THEN 5 ELSE 1 END
+      CASE
+        WHEN b.type = 'MADE_IN_KENYA' THEN
+          (SELECT COUNT(*) FROM media m WHERE m."businessId" = b.id AND m.status = 'APPROVED' AND m.type = 'PHOTO') >= 5
+        WHEN b.type = 'EXPERIENCE_HOST' THEN
+          EXISTS (SELECT 1 FROM experiences e WHERE e."businessId" = b.id AND cardinality(e.images) > 0)
+        ELSE
+          (SELECT COUNT(*) FROM media m WHERE m."businessId" = b.id AND m.status = 'APPROVED' AND m.type = 'PHOTO') >= 1
+      END
     `);
     // A Made in Kenya business awaiting or denied approval never shows
     // publicly — the approved-photo check above wouldn't even catch

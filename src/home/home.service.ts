@@ -62,14 +62,26 @@ export class HomeService {
 
     // "Upcoming Experiences" — joins the hosting business so cards can
     // show who's hosting, not just the experience title.
-    const upcomingRaw = await this.experiences
+    // Quick filters/category selection now reach this rail too (Val,
+    // Sep 2026: "quick filters don't touch events" was a real gap —
+    // every other rail already ran through applyListingFilters, this
+    // one just never got the same treatment). Filters on the JOINED
+    // business's own categories, since an Experience has no category
+    // of its own — it inherits whatever its business is tagged with.
+    // Same ANY-match / array-overlap logic as applyListingFilters,
+    // just written directly here since this query's base entity is
+    // Experience, not Business.
+    const upcomingQb = this.experiences
       .createQueryBuilder('e')
       .leftJoinAndSelect('e.business', 'business')
       .where('e.isExpired = false')
-      .andWhere('e.startsAt > NOW()')
-      .orderBy('e.startsAt', 'ASC')
-      .take(10)
-      .getMany();
+      .andWhere('e.startsAt > NOW()');
+    if (params.category) upcomingQb.andWhere(':c = ANY(business.categories)', { c: params.category });
+    if (params.categories) {
+      const list = params.categories.split(',').map((c) => c.trim()).filter(Boolean);
+      if (list.length > 0) upcomingQb.andWhere('business.categories && :cats', { cats: list });
+    }
+    const upcomingRaw = await upcomingQb.orderBy('e.startsAt', 'ASC').take(10).getMany();
     // .map() strips the full `business` relation object (leftJoinAndSelect
     // pulls it in purely so businessName can be read off it) down to just
     // businessName — spreading {...e} alone would have left the raw
