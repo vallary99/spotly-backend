@@ -108,6 +108,18 @@ export class Business {
   @Column()
   name: string;
 
+  // Val, Sep 2026 SEO spec — the human-readable part of the permanent
+  // public URL (/{city}/{slug}), generated once at creation and never
+  // auto-regenerated on a later rename (Section 1: "the URL should
+  // remain stable"). Unique per city, not globally — see the composite
+  // index in the migration — since the URL already disambiguates by
+  // city, two businesses in different cities can share a slug with no
+  // collision. Nullable only because existing rows need backfilling by
+  // migration before this can be made NOT NULL.
+  @Index()
+  @Column({ type: 'varchar', nullable: true })
+  slug: string | null;
+
   // Multiple categories (max 5 configurable by admin)
   @Column({ type: 'text', array: true, default: [] })
   categories: string[]; // Replaces old single 'category' column

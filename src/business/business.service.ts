@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException, BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { Business, SubscriptionTier, BusinessType, ApprovalStatus } from './entities/business.entity';
 import { Category } from './entities/category.entity';
 import { Experience } from '../experience/entities/experience.entity';
@@ -202,6 +202,45 @@ export class BusinessService {
 
   // POST /businesses — FR-7.1/7.2/7.3: begins onboarding with Venue or
   // Experience Host type; a user may own at most one Business Account.
+  // Val, Sep 2026 SEO spec, Section 1 — generates the {slug} half of
+  // the permanent /{city}/{slug} URL. Collision order: the plain
+  // slugified name first, then name+neighborhood ("royal-cafe-
+  // westlands", per Val's own confirmed example), then a numbered
+  // suffix if even that collides. Only checks within the same city —
+  // the URL already disambiguates by city, so a Mombasa business can
+  // freely share a slug with a Nairobi one.
+  private slugify(text: string): string {
+    return text
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+  }
+
+  private async generateUniqueSlug(name: string, city: string, neighborhood?: string | null): Promise<string> {
+    const base = this.slugify(name) || 'business';
+    if (!(await this.businesses.findOne({ where: { city, slug: base } }))) {
+      return base;
+    }
+    if (neighborhood) {
+      const withNeighborhood = `${base}-${this.slugify(neighborhood)}`;
+      if (!(await this.businesses.findOne({ where: { city, slug: withNeighborhood } }))) {
+        return withNeighborhood;
+      }
+    }
+    let counter = 2;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const candidate = `${base}-${counter}`;
+      if (!(await this.businesses.findOne({ where: { city, slug: candidate } }))) {
+        return candidate;
+      }
+      counter++;
+    }
+  }
+
   async create(userId: string, dto: CreateBusinessDto) {
     // Checked before anything else — no point checking category limits
     // or the first-cohort count for a request that's about to be
@@ -232,11 +271,13 @@ export class BusinessService {
     // SubscriptionService.startTrial).
     const existingCount = await this.businesses.count();
     const isFirstCohort = existingCount < FIRST_COHORT_SIZE;
+    const slug = await this.generateUniqueSlug(dto.name, dto.city || 'Nairobi', dto.neighborhood);
 
     const business = await this.businesses.save(
       this.businesses.create({
         ...dto,
         ownerId: userId,
+        slug,
         // Made in Kenya starts PENDING regardless of cohort status —
         // the whole point of this type is verifying the claim before
         // anything publishes (Val, Sep 2026). Venue/Experience Host
@@ -336,12 +377,33 @@ export class BusinessService {
     if (!business) {
       throw new NotFoundException('Business not found.');
     }
+    return this.finishFindOne(business, requestingUserId);
+  }
+
+  // GET /:city/:slug — the permanent public URL (Val, Sep 2026 SEO
+  // spec, Section 1). Case-insensitive on the city segment since a
+  // typed/copied URL shouldn't 404 just over casing, but the slug
+  // itself stays exact — slugs are already lowercase by construction
+  // (see generateUniqueSlug), so there's no legitimate case variant of
+  // a real slug to accept.
+  async findBySlug(city: string, slug: string, requestingUserId?: string) {
+    const business = await this.businesses.findOne({
+      where: { city: ILike(city), slug },
+      relations: ['media', 'reviews', 'experiences'],
+    });
+    if (!business) {
+      throw new NotFoundException('Business not found.');
+    }
+    return this.finishFindOne(business, requestingUserId);
+  }
+
+  private async finishFindOne(business: Business, requestingUserId?: string) {
     // A business owner browsing their own listing doesn't count as a
     // real view — only skip if we KNOW this requester is the owner;
     // anonymous visitors and any other signed-in user still always
     // count (Val, Sep 2026).
     if (business.ownerId !== requestingUserId) {
-      this.usage.queueEvent(id, 'view');
+      this.usage.queueEvent(business.id, 'view');
     }
 
     const [withRating] = await this.attachRatingsAndStripMetrics([business], {

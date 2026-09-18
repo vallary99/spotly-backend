@@ -66,6 +66,20 @@ export class BusinessController {
     return this.service.findOne(id, user?.userId);
   }
 
+  // GET /businesses/lookup/:city/:slug — what the web app's /:city/:slug
+  // page actually calls (Val, Sep 2026 SEO spec, Section 1). Namespaced
+  // under the existing /businesses prefix rather than exposed at a bare
+  // top-level /:city/:slug on the API itself — the public URL pattern
+  // is a spotly-web (Next.js) route, not something the API needs to
+  // mirror at the same path, and a genuinely top-level two-segment
+  // wildcard here would risk colliding with other controllers'
+  // existing routes.
+  @Public()
+  @Get('lookup/:city/:slug')
+  findBySlug(@CurrentUser() user: any, @Param('city') city: string, @Param('slug') slug: string) {
+    return this.service.findBySlug(city, slug, user?.userId);
+  }
+
   @Public()
   @Post(':id/share')
   recordShare(@Param('id') id: string) {

@@ -175,7 +175,7 @@ export class ExperienceService {
     // fallback, never to leak owner-only fields onto a public list.
     return rows.map((e) => {
       const { business, ...rest } = e as any;
-      return withBudgetFallback(rest, business);
+      return { ...withBudgetFallback(rest, business), businessName: business?.name, businessSlug: business?.slug, businessCity: business?.city };
     });
   }
 

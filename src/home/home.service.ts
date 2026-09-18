@@ -90,7 +90,7 @@ export class HomeService {
     // ownerId) on a public, unauthenticated endpoint.
     const upcoming = upcomingRaw.map((e) => {
       const { business, ...rest } = e;
-      return { ...withBudgetFallback(rest, business), businessName: business?.name };
+      return { ...withBudgetFallback(rest, business), businessName: business?.name, businessSlug: business?.slug, businessCity: business?.city };
     });
 
     // "Made in Kenya" — one simple combined rail across all five
