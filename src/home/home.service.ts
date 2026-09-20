@@ -43,7 +43,13 @@ export class HomeService {
       // only remain for entertainment discovery"). Still fully
       // reachable through ordinary search/browse (GET /businesses),
       // which doesn't call this particular baseQb.
-      qb.andWhere(`b.type != 'MADE_IN_KENYA'`);
+      // Experience Host also excluded now (Val, Sep 2026: "they should
+      // only appear on the upcoming experiences rail") — they may have
+      // no business-level photo at all, which is exactly what a
+      // business card here needs to show something meaningful. Still
+      // fully reachable through ordinary search/browse, same as Made
+      // in Kenya.
+      qb.andWhere(`b.type NOT IN ('MADE_IN_KENYA', 'EXPERIENCE_HOST')`);
       return qb;
     };
 

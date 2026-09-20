@@ -570,7 +570,14 @@ export class BusinessService {
         WHEN b.type = 'MADE_IN_KENYA' THEN
           (SELECT COUNT(*) FROM media m WHERE m."businessId" = b.id AND m.status = 'APPROVED' AND m.type = 'PHOTO') >= 5
         WHEN b.type = 'EXPERIENCE_HOST' THEN
-          EXISTS (SELECT 1 FROM experiences e WHERE e."businessId" = b.id AND cardinality(e.images) > 0)
+          -- Val, Sep 2026: "they don't have to upload photos" — the
+          -- earlier "at least one experience with a photo" bar is
+          -- gone; publishing any real (non-draft) experience at all is
+          -- enough. They're also excluded from Spot It/Popular (see
+          -- home.service.ts's baseQb) precisely because they may have
+          -- no photo anywhere to show as a business card — Upcoming
+          -- Experiences is their only discovery rail now.
+          EXISTS (SELECT 1 FROM experiences e WHERE e."businessId" = b.id AND e."isDraft" = false)
         ELSE
           (SELECT COUNT(*) FROM media m WHERE m."businessId" = b.id AND m.status = 'APPROVED' AND m.type = 'PHOTO') >= 1
       END
