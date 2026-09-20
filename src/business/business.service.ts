@@ -189,6 +189,30 @@ export class BusinessService {
     }
   }
 
+  // GET /businesses/reverse-geocode — same Nominatim-via-server
+  // reasoning as geocodeAddress above, just the reverse direction:
+  // coordinates in, a city name out. Powers the Experience Host
+  // onboarding form's "default to my current location" city detection
+  // (Val, Sep 2026). Returns null on anything it can't confidently
+  // resolve — the caller already falls back to Nairobi.
+  async reverseGeocodeCity(latitude: number, longitude: number): Promise<string | null> {
+    const params = new URLSearchParams({
+      lat: String(latitude),
+      lon: String(longitude),
+      format: 'json',
+    });
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params.toString()}`, {
+        headers: { 'User-Agent': 'Spotly/1.0 (hello@spotly.co.ke)' },
+      });
+      if (!res.ok) return null;
+      const result = (await res.json()) as { address?: { city?: string; town?: string; county?: string } };
+      return result.address?.city || result.address?.town || result.address?.county || null;
+    } catch {
+      return null;
+    }
+  }
+
   // GET /businesses/categories — powers the registration form's dropdown.
   // Now fetches from the Category table (admin-managed) instead of hardcoded
   // SEED_CATEGORIES.
@@ -462,6 +486,19 @@ export class BusinessService {
       const maxCategories = await this.getMaxCategories();
       if (dto.categories.length > maxCategories) {
         throw new BadRequestException(`A business can have at most ${maxCategories} categories.`);
+      }
+    }
+    // Val, Sep 2026: only Venue <-> Experience Host is a real toggle —
+    // Made in Kenya has its own approval-gated creation flow and
+    // shouldn't be switched into or out of casually via a profile
+    // edit. Existing type-specific fields (amenities, hours, etc.) are
+    // deliberately left as-is on switch rather than cleared — they
+    // just stop being shown/used for the new type, so switching back
+    // later doesn't lose anything.
+    if (dto.type && dto.type !== business.type) {
+      const TOGGLABLE = [BusinessType.VENUE, BusinessType.EXPERIENCE_HOST];
+      if (!TOGGLABLE.includes(business.type) || !TOGGLABLE.includes(dto.type)) {
+        throw new BadRequestException('Only switching between Venue and Experience Host is supported here.');
       }
     }
     Object.assign(business, dto);

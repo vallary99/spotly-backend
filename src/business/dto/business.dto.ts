@@ -105,6 +105,15 @@ export class CreateBusinessDto {
 }
 
 export class UpdateBusinessDto {
+  // Val, Sep 2026: "there is however no way of editing that [type]."
+  // Deliberately restricted to VENUE/EXPERIENCE_HOST in
+  // BusinessService.update() — Made in Kenya has its own approval-
+  // gated creation flow and shouldn't be a casual toggle target either
+  // direction.
+  @IsOptional()
+  @IsEnum(BusinessType)
+  type?: BusinessType;
+
   @IsOptional()
   @IsString()
   name?: string;

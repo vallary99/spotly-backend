@@ -56,6 +56,15 @@ export class BusinessController {
     return this.service.geocodeAddress(query || '');
   }
 
+  @Public()
+  @Get('reverse-geocode')
+  async reverseGeocode(@Query('lat') lat: string, @Query('lon') lon: string) {
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lon);
+    if (isNaN(latitude) || isNaN(longitude)) return { city: null };
+    return { city: await this.service.reverseGeocodeCity(latitude, longitude) };
+  }
+
   // @Public(), but the JWT guard still populates @CurrentUser() when a
   // valid token is present (it only stops short of *requiring* one) —
   // so a logged-in owner viewing their own business still gets
