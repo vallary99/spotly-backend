@@ -179,6 +179,20 @@ export class ExperienceService {
     });
   }
 
+  // GET /experiences/:id — Val, Sep 2026: "the link should take them to
+  // the exact thing that was shared" for a shared event. Same public
+  // field-stripping shape as findAll; a draft (not yet real, published
+  // content) or an experience that's been deleted since the link was
+  // shared both correctly 404 rather than ever being viewable this way.
+  async findOne(id: string) {
+    const experience = await this.experiences.findOne({ where: { id, isDraft: false }, relations: ['business'] });
+    if (!experience) {
+      throw new NotFoundException('Experience not found.');
+    }
+    const { business, ...rest } = experience as any;
+    return { ...withBudgetFallback(rest, business), businessName: business?.name, businessSlug: business?.slug, businessCity: business?.city };
+  }
+
   async update(id: string, ownerId: string, dto: UpdateExperienceDto) {
     const experience = await this.experiences.findOne({ where: { id }, relations: ['business'] });
     if (!experience) {

@@ -60,6 +60,13 @@ export class ExperienceController {
     return this.service.findAll({ upcoming: upcoming === 'true' });
   }
 
+  // GET /experiences/:id — Val, Sep 2026: powers a shared event link.
+  @Public()
+  @Get('experiences/:id')
+  findOne(@Param('id') id: string) {
+    return this.service.findOne(id);
+  }
+
   @Roles(UserRole.BUSINESS_OWNER, UserRole.ADMIN)
   @Put('experiences/:id')
   update(@CurrentUser() user: any, @Param('id') id: string, @Body() dto: UpdateExperienceDto) {
