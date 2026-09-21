@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Bookmark } from './entities/bookmark.entity';
 import { Business } from '../business/entities/business.entity';
+import { Experience } from '../experience/entities/experience.entity';
 import { CreateBookmarkDto } from './dto/bookmark.dto';
 import { BusinessService } from '../business/business.service';
 
@@ -11,6 +12,7 @@ export class BookmarkService {
   constructor(
     @InjectRepository(Bookmark) private bookmarks: Repository<Bookmark>,
     @InjectRepository(Business) private businesses: Repository<Business>,
+    @InjectRepository(Experience) private experiences: Repository<Experience>,
     private businessService: BusinessService,
   ) {}
 
@@ -28,6 +30,18 @@ export class BookmarkService {
       const business = await this.businesses.findOne({ where: { id: dto.businessId } });
       if (business?.ownerId === userId) {
         throw new ForbiddenException('You cannot save your own business.');
+      }
+    }
+    // Val, Sep 2026: "a host should not be able to favorite their own
+    // events" — same trust-integrity rule as businesses above, this
+    // path just never had it.
+    if (dto.experienceId) {
+      const experience = await this.experiences.findOne({ where: { id: dto.experienceId } });
+      if (experience) {
+        const business = await this.businesses.findOne({ where: { id: experience.businessId } });
+        if (business?.ownerId === userId) {
+          throw new ForbiddenException('You cannot save your own event.');
+        }
       }
     }
     const existing = await this.bookmarks.findOne({

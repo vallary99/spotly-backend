@@ -80,7 +80,11 @@ export class HomeService {
     const upcomingQb = this.experiences
       .createQueryBuilder('e')
       .leftJoinAndSelect('e.business', 'business')
+      // Val, Sep 2026: "experiences that are saved as draft are visible
+      // to users on the home page" — confirmed, this query never
+      // checked isDraft at all.
       .where('e.isExpired = false')
+      .andWhere('e.isDraft = false')
       .andWhere('e.startsAt > NOW()');
     if (params.category) upcomingQb.andWhere(':c = ANY(business.categories)', { c: params.category });
     if (params.categories) {
