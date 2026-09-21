@@ -187,10 +187,22 @@ export class ExperienceService {
     if (experience.business.ownerId !== ownerId) {
       throw new ForbiddenException('You do not own this experience.');
     }
+    // Val, Sep 2026: clamp same as Media.setFocalPoint — a malformed or
+    // out-of-range value from the client shouldn't corrupt what gets
+    // stored.
+    const clampedFocalPoints = dto.imageFocalPoints
+      ? Object.fromEntries(
+          Object.entries(dto.imageFocalPoints).map(([url, p]) => [
+            url,
+            { x: Math.max(0, Math.min(100, p.x)), y: Math.max(0, Math.min(100, p.y)) },
+          ]),
+        )
+      : undefined;
     Object.assign(experience, {
       ...dto,
       ...(dto.startsAt ? { startsAt: new Date(dto.startsAt) } : {}),
       ...(dto.endsAt ? { endsAt: new Date(dto.endsAt) } : {}),
+      ...(clampedFocalPoints ? { imageFocalPoints: clampedFocalPoints } : {}),
     });
     return this.experiences.save(experience);
   }

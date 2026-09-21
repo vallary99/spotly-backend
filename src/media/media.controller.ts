@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Param, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Delete, Param, Post, Put, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { MediaService } from './media.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -63,5 +63,18 @@ export class MediaController {
   @Delete(':mediaId')
   remove(@CurrentUser() user: any, @Param('id') businessId: string, @Param('mediaId') mediaId: string) {
     return this.service.remove(businessId, mediaId, user.userId);
+  }
+
+  // Val, Sep 2026: "allow user to move the images they upload... not
+  // just having a default crop line." x/y are percentages (0-100).
+  @Put(':mediaId/focal-point')
+  setFocalPoint(
+    @CurrentUser() user: any,
+    @Param('id') businessId: string,
+    @Param('mediaId') mediaId: string,
+    @Body('x') x: number,
+    @Body('y') y: number,
+  ) {
+    return this.service.setFocalPoint(businessId, mediaId, user.userId, x, y);
   }
 }

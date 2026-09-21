@@ -245,4 +245,19 @@ export class MediaService {
     await this.mediaRepo.remove(media);
     return { deleted: true };
   }
+
+  // Val, Sep 2026: "allow user to move the images they upload... so it
+  // can fit and show what they prioritize most."
+  async setFocalPoint(businessId: string, mediaId: string, ownerId: string, x: number, y: number) {
+    const business = await this.businesses.findOne({ where: { id: businessId } });
+    if (!business) throw new NotFoundException('Business not found.');
+    if (business.ownerId !== ownerId) throw new ForbiddenException('You do not own this business.');
+
+    const media = await this.mediaRepo.findOne({ where: { id: mediaId, businessId } });
+    if (!media) throw new NotFoundException('Media not found.');
+
+    media.focalX = Math.max(0, Math.min(100, x));
+    media.focalY = Math.max(0, Math.min(100, y));
+    return this.mediaRepo.save(media);
+  }
 }

@@ -44,6 +44,14 @@ export class Experience {
   @Column({ type: 'text', array: true, default: [] })
   images: string[];
 
+  // Val, Sep 2026: same "move the image to show what you prioritize
+  // most" feature as Media.focalX/focalY, but images here is a plain
+  // string[] rather than a proper one-row-per-image table, so this is
+  // a map from image URL to its focal point instead of columns on a
+  // row. Null/missing entry means center, same reasoning as Media.
+  @Column({ type: 'jsonb', nullable: true })
+  imageFocalPoints: Record<string, { x: number; y: number }> | null;
+
   @Index()
   @Column({ type: 'timestamptz', nullable: true })
   startsAt: Date | null;

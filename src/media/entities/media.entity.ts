@@ -61,6 +61,19 @@ export class Media {
   @Column({ nullable: true })
   perceptualHash: string;
 
+  // Val, Sep 2026: "allow user to move the images they upload... so it
+  // can fit and show what they prioritize most, not just having a
+  // default crop line." Percentages (0-100) for CSS object-position;
+  // null means the display default (50/50, i.e. plain center-crop) —
+  // deliberately not backfilled to 50/50 on existing rows, since null
+  // and "centered on purpose" mean the same thing at render time and
+  // there's no need to distinguish them.
+  @Column({ type: 'float', nullable: true })
+  focalX: number | null;
+
+  @Column({ type: 'float', nullable: true })
+  focalY: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

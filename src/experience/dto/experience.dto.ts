@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsInt, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { ArrayMinSize, IsArray, IsDateString, IsEnum, IsInt, IsNumber, IsObject, IsOptional, IsString, Min } from 'class-validator';
 import { ExperiencePaymentTiming } from '../entities/experience.entity';
 
 // Every field is deliberately required here — a business owner filling
@@ -93,4 +93,9 @@ export class UpdateExperienceDto {
   @IsOptional() @IsInt() @Min(1) capacity?: number | null;
   @IsOptional() @IsEnum(ExperiencePaymentTiming) paymentTiming?: ExperiencePaymentTiming;
   @IsOptional() @IsString() instructions?: string;
+  // Val, Sep 2026: "allow user to move the images they upload... so it
+  // can fit and show what they prioritize most." Map from image URL to
+  // {x, y} percentages (0-100); validated/clamped in the service, same
+  // as Media.setFocalPoint.
+  @IsOptional() @IsObject() imageFocalPoints?: Record<string, { x: number; y: number }>;
 }
